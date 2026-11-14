@@ -301,6 +301,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [query, setQuery] = useState('');
   type FlagMode = 'any' | 'only' | 'exclude';
@@ -378,6 +379,39 @@ export default function App() {
     else if (sortKey === 'checkDate') sorted.sort((a, b) => (a.lastCheckedDate ?? '').localeCompare(b.lastCheckedDate ?? ''));
     return sorted;
   }, [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
+
+  // 絞り込みが既定以外になっているか（検索ボタンのドット表示と、リセットの可否に使う）
+  const filtersActive =
+    query.trim() !== '' || viewKey !== 'all' || categoryFilter !== 'all' || sortKey !== 'order' ||
+    flagFilters.favorite !== 'any' || flagFilters.completed !== 'any' ||
+    flagFilters.adult !== 'any' || flagFilters.hidden !== 'exclude';
+
+  function resetFilters() {
+    setQuery('');
+    setViewKey('all');
+    setCategoryFilter('all');
+    setSortKey('order');
+    setFlagFilters({
+      favorite: 'any',
+      completed: 'any',
+      adult: 'any',
+      hidden: 'exclude',
+    });
+  }
+
+  // 一覧の先頭へ滑らかに戻る
+  function scrollToTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }
+
+  // 検索モーダルの「結果を表示」: 閉じて一覧の先頭へ戻る
+  function showSearchResults() {
+    setShowSearch(false);
+    scrollToTop();
+  }
 
   async function onFile(file: File) {
     setError(null);
@@ -479,6 +513,57 @@ export default function App() {
     };
   }
 
+  // 検索ボックスと絞り込み一式: ページ上（PC）と検索モーダル（狭い画面）で同じ部品を使う
+  const filterControls = (
+    <>
+      <input
+        type="search"
+        className="searchBox"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="タイトル・メモで検索"
+      />
+      <div className="filterRow">
+        <label>表示
+          <select value={viewKey} onChange={e => setViewKey(e.target.value)}>
+            <option value="all">すべて</option>
+            <option value="check">要チェック（未完結）</option>
+            <option value="unread">残りあり</option>
+            <option value="caughtup">追いつき</option>
+            <option value="finished">完了（完結・残りなし）</option>
+          </select>
+        </label>
+        <label>カテゴリ
+          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+            <option value="all">すべて</option>
+            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label>並び順
+          <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
+            <option value="order">保存順</option>
+            <option value="title">タイトル順</option>
+            <option value="unread">残りが多い順</option>
+            <option value="progressDate">最終進捗日が新しい順</option>
+            <option value="checkDate">最終チェック日が古い順</option>
+          </select>
+        </label>
+        {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
+          <label key={key}>{label}
+            <select
+              value={flagFilters[key]}
+              onChange={e => setFlagFilters(f => ({ ...f, [key]: e.target.value as FlagMode }))}
+            >
+              <option value="any">指定なし</option>
+              <option value="only">のみ表示</option>
+              <option value="exclude">非表示</option>
+            </select>
+          </label>
+        ))}
+      </div>
+    </>
+  );
+
   return (
     <div className="app">
       <header className="appHeader">
@@ -498,6 +583,9 @@ export default function App() {
       </header>
       <button className="fabAdd" onClick={() => setEditing({ mode: 'new' })} aria-label="新規登録" title="新規登録">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
+      <button className={`searchFab${filtersActive ? ' hasActive' : ''}`} onClick={() => setShowSearch(true)} aria-label="検索と絞り込みを開く" title="検索と絞り込み">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
       </button>
 
       {showSettings && (
@@ -585,6 +673,17 @@ export default function App() {
         </Modal>
       )}
 
+      {showSearch && (
+        <Modal title="検索と絞り込み" onClose={() => setShowSearch(false)}>
+          {filterControls}
+          <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
+          <div className="modalActions">
+            <button className="btn" onClick={resetFilters} disabled={!filtersActive}>条件をリセット</button>
+            <button className="btn btnPrimary" onClick={showSearchResults}>結果を表示</button>
+          </div>
+        </Modal>
+      )}
+
       {savedNote && <p className="ok banner">{savedNote}</p>}
 
       <section className="summary" aria-label="概要">
@@ -596,53 +695,9 @@ export default function App() {
       </section>
 
       <section className="filters" aria-label="検索と絞り込み">
-        <input
-          type="search"
-          className="searchBox"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="タイトル・メモで検索"
-        />
-        <div className="filterRow">
-          <label>表示
-            <select value={viewKey} onChange={e => setViewKey(e.target.value)}>
-              <option value="all">すべて</option>
-              <option value="check">要チェック（未完結）</option>
-              <option value="unread">残りあり</option>
-              <option value="caughtup">追いつき</option>
-              <option value="finished">完了（完結・残りなし）</option>
-            </select>
-          </label>
-          <label>カテゴリ
-            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-              <option value="all">すべて</option>
-              {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label>並び順
-            <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
-              <option value="order">保存順</option>
-              <option value="title">タイトル順</option>
-              <option value="unread">残りが多い順</option>
-              <option value="progressDate">最終進捗日が新しい順</option>
-              <option value="checkDate">最終チェック日が古い順</option>
-            </select>
-          </label>
-          {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
-            <label key={key}>{label}
-              <select
-                value={flagFilters[key]}
-                onChange={e => setFlagFilters(f => ({ ...f, [key]: e.target.value as FlagMode }))}
-              >
-                <option value="any">指定なし</option>
-                <option value="only">のみ表示</option>
-                <option value="exclude">非表示</option>
-              </select>
-            </label>
-          ))}
-        </div>
-        <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
+        {filterControls}
       </section>
+      <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
 
       {stored.length === 0 ? (
         <section className="emptyState">
