@@ -1,0 +1,33 @@
+# ログファイルやキャッシュ
+*.log
+.DS_Store
+.eslintcache
+export_*.md
+__pycache__
+*.diff
+
+# 依存関係・ビルド成果物
+node_modules/
+dist/
+
+# エディタ
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# 作業中ファイル
+*.local.*
+
+# ツールファイル
+devtools/
+
+# 個人データ（実データ・アプリの書き出しは絶対にコミットしない）
+*.xlsm
+*.xlsx
+*.csv
+*.txt
+out/
+real-*.csv
+real-*.json
+season-log.csv
+season-log.json
