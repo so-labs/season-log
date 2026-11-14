@@ -339,6 +339,15 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // 「先頭へ戻る」ボタンの表示: 一定量スクロールしたら出す
+  const [showToTop, setShowToTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowToTop(window.scrollY > 600);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const storedStats = useMemo(() => statsOf(stored), [stored]);
   const loadedStats = useMemo(() => (loaded ? statsOf(loaded.works) : null), [loaded]);
   const categoryOptions = useMemo(() => {
@@ -581,6 +590,16 @@ export default function App() {
           </button>
         </div>
       </header>
+      {showToTop && (
+        <button className="toTopBtn" onClick={() => {
+          window.scrollTo({
+            top: 0,
+            behavior: 'smooth',
+          });
+        }} aria-label="先頭へ戻る" title="先頭へ戻る">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+        </button>
+      )}
       <button className="fabAdd" onClick={() => setEditing({ mode: 'new' })} aria-label="新規登録" title="新規登録">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       </button>

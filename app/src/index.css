@@ -774,6 +774,30 @@ body {
   color: var(--ink);
 }
 
+/* 先頭へ戻るボタン: PCのみ（狭い画面では右下を追加ボタンが使う） */
+.toTopBtn {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 40;
+}
+
+.toTopBtn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* 浮動の追加ボタン: モバイルのみ（PCではヘッダーのボタンを使う） */
 .fabAdd {
   display: none;
@@ -799,6 +823,10 @@ body {
 
 @media (max-width: 640px) {
   .addBtn {
+    display: none;
+  }
+
+  .toTopBtn {
     display: none;
   }
 
