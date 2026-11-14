@@ -348,6 +348,20 @@ export default function App() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // バージョン表示: sw.js の CACHE_NAME（season-log-YYYY.MM-rN）から取り出す
+  const [appVersion, setAppVersion] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/sw.js', { cache: 'no-store' })
+      .then(res => (res.ok ? res.text() : ''))
+      .then(text => {
+        const m = text.match(/season-log-(\d{4}\.\d{2}-r\d+)/);
+        if (!cancelled && m) setAppVersion(m[1]);
+      })
+      .catch(() => { /* 取得できない環境では表示しない */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const storedStats = useMemo(() => statsOf(stored), [stored]);
   const loadedStats = useMemo(() => (loaded ? statsOf(loaded.works) : null), [loaded]);
   const categoryOptions = useMemo(() => {
@@ -689,6 +703,7 @@ export default function App() {
             </div>
             <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
           </section>
+          {appVersion && <p className="versionLine">Ver {appVersion}</p>}
         </Modal>
       )}
 

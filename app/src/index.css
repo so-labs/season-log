@@ -208,6 +208,14 @@ body {
   margin: 10px 0 4px;
 }
 
+/* バージョン表示: 設定モーダルの末尾に右寄せで出す（値は sw.js から取得） */
+.versionLine {
+  margin: 16px 0 0;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .menuItemLabelGroup {
   display: flex;
   flex-direction: column;
