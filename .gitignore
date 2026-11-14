@@ -17,6 +17,7 @@ dist/
 
 # 作業中ファイル
 *.local.*
+*.patch
 
 # ツールファイル
 devtools/

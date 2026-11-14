@@ -117,8 +117,11 @@ function WorkCard({ work: w, onStep, onCheck, onEdit, onDelete }: WorkCardProps)
 // すべてのダイアログはこの外枠を共有する: 背景クリックか Esc で閉じ、
 // ダイアログが重なっているときは最前面のものだけが Esc に応じる
 // （例: 設定ダイアログの上に重なる削除確認）。
+// 開いている間は背後のページのスクロールを止める（最初の1つが開いた
+// 時点で止め、すべて閉じた時点で元の状態に戻す）。
 
 const modalStack: object[] = [];
+let savedBodyOverflow: string | null = null;
 
 function Modal({ title, onClose, wide, children }: {
   title: string;
@@ -131,6 +134,10 @@ function Modal({ title, onClose, wide, children }: {
   useEffect(() => {
     const id = idRef.current!;
     modalStack.push(id);
+    if (modalStack.length === 1) {
+      savedBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && modalStack[modalStack.length - 1] === id) onClose();
     };
@@ -139,6 +146,10 @@ function Modal({ title, onClose, wide, children }: {
       document.removeEventListener('keydown', onKey);
       const i = modalStack.indexOf(id);
       if (i >= 0) modalStack.splice(i, 1);
+      if (modalStack.length === 0) {
+        document.body.style.overflow = savedBodyOverflow ?? '';
+        savedBodyOverflow = null;
+      }
     };
   }, [onClose]);
   return (
@@ -217,38 +228,38 @@ function EditForm({ initial, isNew, onSave, onCancel }: EditFormProps) {
 
   return (
     <Modal title={isNew ? '新規登録' : '編集'} onClose={onCancel}>
-        <div className="formGrid">
-          <label className="wide">タイトル <input type="text" value={title} onChange={e => setTitle(e.target.value)} /></label>
-          <label>カテゴリ
-            <select value={category} onChange={e => setCategory(e.target.value)}>
-              {!CATEGORIES.includes(category) && <option>{category}</option>}
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </label>
-          <label>進捗単位
-            <select value={unit} onChange={e => setUnit(e.target.value)}>
-              {!UNITS.includes(unit) && <option>{unit}</option>}
-              {UNITS.map(u => <option key={u}>{u}</option>)}
-            </select>
-          </label>
-          <label>進捗 <input type="text" inputMode="decimal" value={progressText} onChange={e => setProgressText(e.target.value)} placeholder="例: 11.1" /></label>
-          <label>最大 <input type="text" inputMode="decimal" value={maxText} onChange={e => setMaxText(e.target.value)} placeholder="空欄 = 未確認" /></label>
-          <label>最終チェック日 <input type="date" value={checkedDate} onChange={e => setCheckedDate(e.target.value)} /></label>
-          <label>最終進捗日 <input type="date" value={progressDate} onChange={e => setProgressDate(e.target.value)} /></label>
-          <label className="wide">メモ <input type="text" value={memo} onChange={e => setMemo(e.target.value)} /></label>
-        </div>
-        <div className="flagRow">
-          <label><input type="checkbox" checked={favorite} onChange={e => setFavorite(e.target.checked)} /> お気に入り</label>
-          <label><input type="checkbox" checked={isCompleted} onChange={e => setIsCompleted(e.target.checked)} /> 完結</label>
-          <label><input type="checkbox" checked={hasAdult} onChange={e => setHasAdult(e.target.checked)} /> アダルト</label>
-          <label><input type="checkbox" checked={isHidden} onChange={e => setIsHidden(e.target.checked)} /> 非表示</label>
-        </div>
-        <p className="note">進捗を変えると最終進捗日、最大を変えると最終チェック日が自動で今日になります（日付を自分で変えた場合はそちら優先）。</p>
-        {formError && <p className="error" role="alert">{formError}</p>}
-        <div className="modalActions">
-          <button className="btn" onClick={onCancel}>キャンセル</button>
-          <button className="btn btnPrimary" onClick={submit}>保存する</button>
-        </div>
+      <div className="formGrid">
+        <label className="wide">タイトル <input type="text" value={title} onChange={e => setTitle(e.target.value)} /></label>
+        <label>カテゴリ
+          <select value={category} onChange={e => setCategory(e.target.value)}>
+            {!CATEGORIES.includes(category) && <option>{category}</option>}
+            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </label>
+        <label>進捗単位
+          <select value={unit} onChange={e => setUnit(e.target.value)}>
+            {!UNITS.includes(unit) && <option>{unit}</option>}
+            {UNITS.map(u => <option key={u}>{u}</option>)}
+          </select>
+        </label>
+        <label>進捗 <input type="text" inputMode="decimal" value={progressText} onChange={e => setProgressText(e.target.value)} placeholder="例: 11.1" /></label>
+        <label>最大 <input type="text" inputMode="decimal" value={maxText} onChange={e => setMaxText(e.target.value)} placeholder="空欄 = 未確認" /></label>
+        <label>最終チェック日 <input type="date" value={checkedDate} onChange={e => setCheckedDate(e.target.value)} /></label>
+        <label>最終進捗日 <input type="date" value={progressDate} onChange={e => setProgressDate(e.target.value)} /></label>
+        <label className="wide">メモ <input type="text" value={memo} onChange={e => setMemo(e.target.value)} /></label>
+      </div>
+      <div className="flagRow">
+        <label><input type="checkbox" checked={favorite} onChange={e => setFavorite(e.target.checked)} /> お気に入り</label>
+        <label><input type="checkbox" checked={isCompleted} onChange={e => setIsCompleted(e.target.checked)} /> 完結</label>
+        <label><input type="checkbox" checked={hasAdult} onChange={e => setHasAdult(e.target.checked)} /> アダルト</label>
+        <label><input type="checkbox" checked={isHidden} onChange={e => setIsHidden(e.target.checked)} /> 非表示</label>
+      </div>
+      <p className="note">進捗を変えると最終進捗日、最大を変えると最終チェック日が自動で今日になります（日付を自分で変えた場合はそちら優先）。</p>
+      {formError && <p className="error" role="alert">{formError}</p>}
+      <div className="modalActions">
+        <button className="btn" onClick={onCancel}>キャンセル</button>
+        <button className="btn btnPrimary" onClick={submit}>保存する</button>
+      </div>
     </Modal>
   );
 }
@@ -265,15 +276,15 @@ function CheckDialog({ work, onConfirm, onCancel }: {
   const [date, setDate] = useState(todayLocal());
   return (
     <Modal title="確認日を設定" onClose={onCancel}>
-        <p className="checkTarget">「{work.title}」の最終チェック日を記録します。</p>
-        <label className="checkDateLabel">最終チェック日
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-        </label>
-        <p className="note">日付を選んでOKするとその日が入ります。空欄のままOKすると今日になります。</p>
-        <div className="modalActions">
-          <button className="btn" onClick={onCancel}>キャンセル</button>
-          <button className="btn btnPrimary" onClick={() => onConfirm(date === '' ? todayLocal() : date)}>OK</button>
-        </div>
+      <p className="checkTarget">「{work.title}」の最終チェック日を記録します。</p>
+      <label className="checkDateLabel">最終チェック日
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+      </label>
+      <p className="note">日付を選んでOKするとその日が入ります。空欄のままOKすると今日になります。</p>
+      <div className="modalActions">
+        <button className="btn" onClick={onCancel}>キャンセル</button>
+        <button className="btn btnPrimary" onClick={() => onConfirm(date === '' ? todayLocal() : date)}>OK</button>
+      </div>
     </Modal>
   );
 }
@@ -491,86 +502,86 @@ export default function App() {
 
       {showSettings && (
         <Modal title="設定" wide onClose={() => setShowSettings(false)}>
-            <section className="settingsSection">
-              <div className="menuItemLabelGroup">
-                <span className="menuItemTitle">テーマ</span>
-                <span className="menuItemDesc">アプリの外観切り替え</span>
-              </div>
-              <div className="themeToggleGroup" role="radiogroup" aria-label="テーマ">
-                <button type="button" className={`themeToggleBtn${themePref === 'light' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'light'} onClick={() => setThemePref('light')}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                  <span>ライト</span>
-                </button>
-                <button type="button" className={`themeToggleBtn${themePref === 'system' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'system'} onClick={() => setThemePref('system')}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"></path></svg>
-                  <span>システム</span>
-                </button>
-                <button type="button" className={`themeToggleBtn${themePref === 'dark' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'dark'} onClick={() => setThemePref('dark')}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                  <span>ダーク</span>
-                </button>
-              </div>
-            </section>
-            <div className="settingsSeparator" />
-            <section className="settingsSection">
-              <h2 className="settingsSubheading">データ管理</h2>
-          <h3>ファイルを取り込む</h3>
-          <p className="note">本アプリが出力したCSV、またはJSONバックアップを取り込めます。</p>
-          <div className="panelRow">
-            <label>新規登録の既定カテゴリ
-              <select value={category} onChange={e => setCategory(e.target.value)}>
-                {!CATEGORIES.includes(category) && <option>{category}</option>}
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </label>
-            <label>新規登録の既定の進捗単位
-              <select value={unit} onChange={e => setUnit(e.target.value)}>
-                {!UNITS.includes(unit) && <option>{unit}</option>}
-                {UNITS.map(u => <option key={u}>{u}</option>)}
-              </select>
-            </label>
-            <input
-              type="file"
-              accept=".csv,.txt,.json"
-              onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
-            />
-          </div>
-          {error && <p className="error" role="alert">{error}</p>}
-          {loaded && loadedStats && (
-            <div className="importBox">
-              <p>
-                <strong>取り込み結果: {loaded.sourceName}</strong><br />
-                形式: {loaded.format === 'new' ? 'CSV' : 'JSONバックアップ'} / {loadedStats.total}件<br />
-                お気に入り {loadedStats.favorite} / 完結 {loadedStats.completed} / アダルト {loadedStats.adult} / 非表示 {loadedStats.hidden} / 日付あり {loadedStats.withDate} / 進捗が小数 {loadedStats.decimal}
-              </p>
-              <div className="panelRow">
-                {stored.length === 0 && (
-                  <button className="btn btnPrimary" onClick={() => void saveImport('replace')}>この内容で保存する</button>
-                )}
-                {stored.length > 0 && (
-                  <>
-                    <button className="btn btnPrimary" onClick={() => void saveImport('merge')}>IDで照合して保存（既存は更新・新規は追加）</button>
-                    <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
-                  </>
-                )}
-                <button className="btn" onClick={() => setLoaded(null)}>保存しない</button>
-              </div>
-              <ul className="previewList">
-                {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
-                  <li key={w.id}><span className="previewTitle">{w.title}</span><span className="previewMeta">{formatX10(w.progressX10)} / {w.maxX10 === null ? '—' : formatX10(w.maxX10)} {w.unit}</span></li>
-                ))}
-              </ul>
-              {loaded.works.length > PREVIEW_ROWS && <p className="note">…ほか {loaded.works.length - PREVIEW_ROWS} 件（プレビューは先頭{PREVIEW_ROWS}件のみ）</p>}
+          <section className="settingsSection">
+            <div className="menuItemLabelGroup">
+              <span className="menuItemTitle">テーマ</span>
+              <span className="menuItemDesc">アプリの外観切り替え</span>
             </div>
-          )}
-          <h3>保存済みデータの書き出し・削除</h3>
-          <div className="panelRow">
-            <button className="btn" onClick={() => download('season-log.csv', worksToCsv(stored), 'text/csv')} disabled={stored.length === 0}>CSVをダウンロード</button>
-            <button className="btn" onClick={() => download('season-log.json', worksToJson(stored), 'application/json')} disabled={stored.length === 0}>JSONをダウンロード</button>
-            <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
-          </div>
-          <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
-            </section>
+            <div className="themeToggleGroup" role="radiogroup" aria-label="テーマ">
+              <button type="button" className={`themeToggleBtn${themePref === 'light' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'light'} onClick={() => setThemePref('light')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <span>ライト</span>
+              </button>
+              <button type="button" className={`themeToggleBtn${themePref === 'system' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'system'} onClick={() => setThemePref('system')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"></path></svg>
+                <span>システム</span>
+              </button>
+              <button type="button" className={`themeToggleBtn${themePref === 'dark' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'dark'} onClick={() => setThemePref('dark')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <span>ダーク</span>
+              </button>
+            </div>
+          </section>
+          <div className="settingsSeparator" />
+          <section className="settingsSection">
+            <h2 className="settingsSubheading">データ管理</h2>
+            <h3>ファイルを取り込む</h3>
+            <p className="note">本アプリが出力したCSV、またはJSONバックアップを取り込めます。</p>
+            <div className="panelRow">
+              <label>新規登録の既定カテゴリ
+                <select value={category} onChange={e => setCategory(e.target.value)}>
+                  {!CATEGORIES.includes(category) && <option>{category}</option>}
+                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </label>
+              <label>新規登録の既定の進捗単位
+                <select value={unit} onChange={e => setUnit(e.target.value)}>
+                  {!UNITS.includes(unit) && <option>{unit}</option>}
+                  {UNITS.map(u => <option key={u}>{u}</option>)}
+                </select>
+              </label>
+              <input
+                type="file"
+                accept=".csv,.txt,.json"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
+              />
+            </div>
+            {error && <p className="error" role="alert">{error}</p>}
+            {loaded && loadedStats && (
+              <div className="importBox">
+                <p>
+                  <strong>取り込み結果: {loaded.sourceName}</strong><br />
+                  形式: {loaded.format === 'new' ? 'CSV' : 'JSONバックアップ'} / {loadedStats.total}件<br />
+                  お気に入り {loadedStats.favorite} / 完結 {loadedStats.completed} / アダルト {loadedStats.adult} / 非表示 {loadedStats.hidden} / 日付あり {loadedStats.withDate} / 進捗が小数 {loadedStats.decimal}
+                </p>
+                <div className="panelRow">
+                  {stored.length === 0 && (
+                    <button className="btn btnPrimary" onClick={() => void saveImport('replace')}>この内容で保存する</button>
+                  )}
+                  {stored.length > 0 && (
+                    <>
+                      <button className="btn btnPrimary" onClick={() => void saveImport('merge')}>IDで照合して保存（既存は更新・新規は追加）</button>
+                      <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
+                    </>
+                  )}
+                  <button className="btn" onClick={() => setLoaded(null)}>保存しない</button>
+                </div>
+                <ul className="previewList">
+                  {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
+                    <li key={w.id}><span className="previewTitle">{w.title}</span><span className="previewMeta">{formatX10(w.progressX10)} / {w.maxX10 === null ? '—' : formatX10(w.maxX10)} {w.unit}</span></li>
+                  ))}
+                </ul>
+                {loaded.works.length > PREVIEW_ROWS && <p className="note">…ほか {loaded.works.length - PREVIEW_ROWS} 件（プレビューは先頭{PREVIEW_ROWS}件のみ）</p>}
+              </div>
+            )}
+            <h3>保存済みデータの書き出し・削除</h3>
+            <div className="panelRow">
+              <button className="btn" onClick={() => download('season-log.csv', worksToCsv(stored), 'text/csv')} disabled={stored.length === 0}>CSVをダウンロード</button>
+              <button className="btn" onClick={() => download('season-log.json', worksToJson(stored), 'application/json')} disabled={stored.length === 0}>JSONをダウンロード</button>
+              <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
+            </div>
+            <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
+          </section>
         </Modal>
       )}
 
@@ -636,7 +647,7 @@ export default function App() {
       {stored.length === 0 ? (
         <section className="emptyState">
           <p>まだ作品が登録されていません。</p>
-          <p className="note">右上の「⚙ データ管理」から、これまでのデータをCSV / JSONで取り込むか、「＋ 新規登録」から最初の1件を登録してください。</p>
+          <p className="note">右上の歯車ボタン（設定）にある「データ管理」から、これまでのデータをCSV / JSONで取り込むか、「＋ 新規登録」から最初の1件を登録してください。</p>
         </section>
       ) : visible.length === 0 ? (
         <section className="emptyState">
