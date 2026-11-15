@@ -102,12 +102,20 @@ async function requestAccessToken(): Promise<string> {
       },
     });
   }
-  const request = new Promise<string>((resolve, reject) => {
-    pendingTokenRequest = { resolve, reject };
-  });
-  // 空文字は「必要なら対話的に求める」の意味で、同意済みなら静かに再取得される。
-  tokenClient.requestAccessToken({ prompt: '' });
-  return request;
+  const requestOnce = (prompt: string) =>
+    new Promise<string>((resolve, reject) => {
+      pendingTokenRequest = { resolve, reject };
+      tokenClient!.requestAccessToken({ prompt });
+    });
+  // まず 'none' で静かな再認証を試す。同意済みでGoogleにサインインしていれば、
+  // アカウント選択などの画面を出さずにトークンを再取得できる。
+  // 静かに取得できない場合だけ、対話的（空文字）に切り替えて画面を出す。
+  // トークンはメモリ上にしか持たないため、この再認証はアプリを開き直すたびに走る。
+  try {
+    return await requestOnce('none');
+  } catch {
+    return requestOnce('');
+  }
 }
 
 async function driveRequest(path: string, init: RequestInit = {}): Promise<Response> {
