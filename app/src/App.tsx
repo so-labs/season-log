@@ -12,7 +12,7 @@ import {
   saveNewWork, updateWork, type ImportPlan,
 } from './db';
 import {
-  CLOUD_SYNC_FILE_NAME, clearCloudSyncState, formatCloudDateTime,
+  clearCloudSyncState, formatCloudDateTime,
   getActiveCloudProviderId, getCloudLastSyncedAt, getCloudRemoteUpdatedAt,
   setActiveCloudProviderId, setCloudLastSyncedAt, setCloudRemoteUpdatedAt,
   type CloudProvider, type CloudRemoteMeta,
@@ -498,6 +498,7 @@ export default function App() {
       setCloudLastSynced(now);
       setCloudRemoteMeta(loadedFromCloud);
       setLoadedFromCloud(null);
+      setCloudNote('クラウドから読み込みました。');
     }
     setLoaded(null);
   }
@@ -595,30 +596,6 @@ export default function App() {
       setCloudNote('クラウドの内容を取り込み待ちにしました。下の確認欄で保存方法を選んでください。');
     } catch (e) {
       setLoadedFromCloud(null);
-      setCloudError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCloudBusy(null);
-    }
-  }
-
-  async function handleCloudDownloadCopy() {
-    const provider = activeCloudProvider;
-    if (!provider) return;
-    setCloudError(null);
-    setCloudNote(null);
-    setCloudBusy('クラウドから取得しています…');
-    try {
-      await ensureCloudConnected(provider);
-      const meta = await provider.findSyncFile();
-      setCloudRemoteMeta(meta);
-      if (!meta) {
-        setCloudError('クラウドにはまだ同期ファイルがありません。先に「クラウドに保存」を実行してください。');
-        return;
-      }
-      const text = await provider.downloadSyncFile(meta.id);
-      download(CLOUD_SYNC_FILE_NAME, text, 'application/json');
-      setCloudNote('クラウドの内容をファイルとしてダウンロードしました（この端末のデータは変更していません）。');
-    } catch (e) {
       setCloudError(e instanceof Error ? e.message : String(e));
     } finally {
       setCloudBusy(null);
@@ -796,10 +773,8 @@ export default function App() {
       {showSettings && (
         <Modal title="設定" wide onClose={() => setShowSettings(false)}>
           <section className="settingsSection">
-            <div className="menuItemLabelGroup">
-              <span className="menuItemTitle">テーマ</span>
-              <span className="menuItemDesc">アプリの外観切り替え</span>
-            </div>
+            <h2 className="settingsSubheading">テーマ</h2>
+            <p className="note">アプリの外観切り替え</p>
             <div className="themeToggleGroup" role="radiogroup" aria-label="テーマ">
               <button type="button" className={`themeToggleBtn${themePref === 'light' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'light'} onClick={() => setThemePref('light')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
@@ -857,7 +832,7 @@ export default function App() {
                       <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
                     </>
                   )}
-                  <button className="btn" onClick={() => { setLoaded(null); setLoadedFromCloud(null); }}>保存しない</button>
+                  <button className="btn" onClick={() => { setLoaded(null); if (loadedFromCloud) setCloudNote(null); setLoadedFromCloud(null); }}>保存しない</button>
                 </div>
                 <ul className="previewList">
                   {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
@@ -901,10 +876,9 @@ export default function App() {
                 <div className="panelRow">
                   <button className="btn btnPrimary" disabled={cloudBusy !== null || stored.length === 0} onClick={() => void handleCloudSave(false)}>クラウドに保存</button>
                   <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudLoad()}>クラウドから読み込む</button>
-                  <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudDownloadCopy()}>クラウドの内容をダウンロード</button>
                   <button className="btn" disabled={cloudBusy !== null} onClick={handleCloudDisconnect}>接続を解除</button>
                 </div>
-                <p className="note">読み込むと、ファイルの取り込みと同じ確認欄が出て、保存方法（IDで照合／すべて入れ替え）を選べます。「クラウドの内容をダウンロード」は、この端末のデータを変えずに同期ファイルのコピーを保存します。接続を解除しても、クラウド上のファイルは消えません。</p>
+                <p className="note">読み込むと、ファイルの取り込みと同じ確認欄が出て、保存方法（IDで照合／すべて入れ替え）を選べます。接続を解除しても、クラウド上のファイルは消えません。</p>
               </>
             )}
             {cloudBusy && <p className="note" role="status">{cloudBusy}</p>}

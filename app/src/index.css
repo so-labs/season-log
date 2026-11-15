@@ -216,23 +216,6 @@ body {
   color: var(--muted);
 }
 
-.menuItemLabelGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
-}
-
-.menuItemTitle {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.menuItemDesc {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
 /* テーマのセグメント切替 — 他ツールと同仕様 */
 .themeToggleGroup {
   display: grid;
@@ -890,7 +873,7 @@ body {
   }
 
   /* 件数サマリは検索モーダルの中だけに出す（ページ上のものは隠す） */
-  .app > .summary {
+  .app>.summary {
     display: none;
   }
 
