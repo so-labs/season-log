@@ -186,24 +186,28 @@ export function stepValueX10(curX10: number, deltaX10: number): number {
 }
 
 /**
- * 進捗ボタン。増減の計算は stepValueX10 で、UI上の便宜として、
- * 現在値が最大を超えていない場合に限り最大で頭打ちにする。
+ * 進捗ボタン。増減の計算は stepValueX10。
  * 値が実際に変わったときだけ最終進捗日を今日にし、変わらなければ
- * 作品をそのまま（同じオブジェクトで）返す。
+ * 作品をそのまま（同じオブジェクトで）返す。最終チェック日は原則として
+ * 更新しない（手元の分を進めただけでは、最新の確認をしたことには
+ * ならないため）が、+ボタンで進捗が最大より大きくなる場合は、
+ * 新しい分を読んだということなので、最大も進捗に合わせて
+ * 最終チェック日も今日にする。
  */
 export function stepProgress(work: Work, deltaX10: number, today: string): Work {
   const cur = work.progressX10 ?? 0;
-  let next = stepValueX10(cur, deltaX10);
-  if (work.maxX10 !== null && cur <= work.maxX10 && next > work.maxX10) next = work.maxX10;
+  const next = stepValueX10(cur, deltaX10);
   if (next === cur) return work;
-  return {
+  const out: Work = {
     ...work,
     progressX10: next,
     lastProgressDate: today,
-    // 空欄の最終チェック日は進捗日で埋める。手元の分を進めたなら、
-    // その日に確認も済んだはずだ、という扱い。
-    lastCheckedDate: work.lastCheckedDate ?? today,
   };
+  if (deltaX10 > 0 && work.maxX10 !== null && next > work.maxX10) {
+    out.maxX10 = next;
+    out.lastCheckedDate = today;
+  }
+  return out;
 }
 
 /** 残りあり: 進捗が既知の最大に届いていない。 */
@@ -246,13 +250,6 @@ export function applyEdits(original: Work, draft: Work, today: string): Work {
   }
   if (draft.maxX10 !== original.maxX10 && draft.lastCheckedDate === original.lastCheckedDate) {
     out.lastCheckedDate = today;
-  }
-  // 進捗ボタンと同じ補完ルール: 進捗が動き、最終チェック日が空欄で
-  // （かつ手編集されていない）場合、確定した進捗日で埋める。
-  if (draft.progressX10 !== original.progressX10
-    && draft.lastCheckedDate === original.lastCheckedDate
-    && out.lastCheckedDate === null && out.lastProgressDate !== null) {
-    out.lastCheckedDate = out.lastProgressDate;
   }
   return out;
 }

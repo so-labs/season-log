@@ -681,7 +681,9 @@ export default function App() {
     if (next === w) return;
     await updateWork(next);
     setToast({
-      message: `「${w.title}」の進捗を ${formatX10(w.progressX10)} → ${formatX10(next.progressX10)} に変更しました`,
+      message: next.maxX10 !== w.maxX10
+        ? `「${w.title}」の進捗を ${formatX10(w.progressX10)} → ${formatX10(next.progressX10)} に変更し、最大も ${formatX10(next.maxX10)} に合わせました`
+        : `「${w.title}」の進捗を ${formatX10(w.progressX10)} → ${formatX10(next.progressX10)} に変更しました`,
       work: w, index: indexOf(w), deleted: false,
     });
   }
@@ -721,9 +723,9 @@ export default function App() {
       await updateWork(applyEdits(editing.original, draft, today));
     } else {
       let w: Work = { ...draft, id: crypto.randomUUID() };
-      if ((w.progressX10 ?? 0) > 0 && w.lastProgressDate === null) w = { ...w, lastProgressDate: today };
-      // 空欄の最終チェック日は進捗日で埋める（他経路と同じ補完ルール）。
-      if (w.lastCheckedDate === null && w.lastProgressDate !== null) w = { ...w, lastCheckedDate: w.lastProgressDate };
+      // 新規登録では最終進捗日・最終チェック日とも今日を入れる（手で指定した日付はそちらを優先）。
+      if (w.lastProgressDate === null) w = { ...w, lastProgressDate: today };
+      if (w.lastCheckedDate === null) w = { ...w, lastCheckedDate: today };
       await saveNewWork(w);
     }
     setEditing(null);
