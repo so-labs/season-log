@@ -321,6 +321,20 @@ function CheckDialog({ work, onConfirm, onCancel }: {
   );
 }
 
+/** 並び順の選択肢（値と表示名）。端末に記憶した値の検証にも使う。 */
+const SORT_OPTIONS = [
+  { value: 'orderDesc', label: '保存順（新しい順）' },
+  { value: 'orderAsc', label: '保存順（古い順）' },
+  { value: 'titleAsc', label: 'タイトル順' },
+  { value: 'titleDesc', label: 'タイトル逆順' },
+  { value: 'unreadDesc', label: '残りが多い順' },
+  { value: 'unreadAsc', label: '残りが少ない順' },
+  { value: 'progressDesc', label: '最終進捗日が新しい順' },
+  { value: 'progressAsc', label: '最終進捗日が古い順' },
+  { value: 'checkAsc', label: '最終チェック日が古い順' },
+  { value: 'checkDesc', label: '最終チェック日が新しい順' },
+] as const;
+
 export default function App() {
   // 設定は localStorage に置く（端末ローカル。作品データには混ぜない）。
   const [category, setCategory] = useState(() => localStorage.getItem('season-log:defaultCategory') ?? '漫画');
@@ -342,7 +356,12 @@ export default function App() {
   });
   const [viewKey, setViewKey] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sortKey, setSortKey] = useState('orderDesc');
+  // 並び順は端末にだけ記憶する（作品データや書き出しには含めない）。
+  const [sortKey, setSortKey] = useState(() => {
+    const v = localStorage.getItem('season-log:sort');
+    return v !== null && SORT_OPTIONS.some(o => o.value === v) ? v : 'orderDesc';
+  });
+  useEffect(() => { localStorage.setItem('season-log:sort', sortKey); }, [sortKey]);
   type ThemePref = 'light' | 'system' | 'dark';
   const [themePref, setThemePref] = useState<ThemePref>(() => {
     const v = localStorage.getItem('season-log:theme');
@@ -758,16 +777,7 @@ export default function App() {
         </label>
         <label>並び順
           <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
-            <option value="orderDesc">保存順（新しい順）</option>
-            <option value="orderAsc">保存順（古い順）</option>
-            <option value="titleAsc">タイトル順</option>
-            <option value="titleDesc">タイトル逆順</option>
-            <option value="unreadDesc">残りが多い順</option>
-            <option value="unreadAsc">残りが少ない順</option>
-            <option value="progressDesc">最終進捗日が新しい順</option>
-            <option value="progressAsc">最終進捗日が古い順</option>
-            <option value="checkAsc">最終チェック日が古い順</option>
-            <option value="checkDesc">最終チェック日が新しい順</option>
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
         {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
@@ -957,6 +967,7 @@ export default function App() {
 
       <section className="filters" aria-label="検索と絞り込み">
         {filterControls}
+        <button className="btn filtersReset" onClick={resetFilters} disabled={!filtersActive}>条件をリセット</button>
       </section>
       <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
 
