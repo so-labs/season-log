@@ -321,8 +321,13 @@ export default function App() {
     localStorage.setItem('season-log:theme', themePref);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => {
-      document.documentElement.dataset.theme =
+      const effective =
         themePref === 'system' ? (mq.matches ? 'dark' : 'light') : themePref;
+      document.documentElement.dataset.theme = effective;
+      // ステータスバーの色（theme-color）も、実効テーマの背景色に合わせる。
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', effective === 'dark' ? '#0F1F1E' : '#FAFAF9');
     };
     apply();
     if (themePref !== 'system') return;
