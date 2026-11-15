@@ -171,22 +171,29 @@ export function todayLocal(now: Date = new Date()): string {
 }
 
 /**
- * 進捗ボタン。deltaX10 は -10, -1, +1, +10 のいずれか。
+ * ステッパーの増減計算（10倍整数）。deltaX10 は -10, -1, +1, +10 のいずれか。
  * 整数ステップ（±1）は、まず現在の整数部に合わせる: 10.3 +1 -> 11、
- * 10.3 -1 -> 9。小数ステップ（±0.1）は小数部を保つ。結果は0未満にせず、
- * UI上の便宜として、現在値が最大を超えていない場合に限り最大で頭打ちにする。
+ * 10.3 -1 -> 9。小数ステップ（±0.1）は小数部を保つ。結果は0未満にしない。
+ */
+export function stepValueX10(curX10: number, deltaX10: number): number {
+  let next: number;
+  if (deltaX10 === 10 || deltaX10 === -10) {
+    next = (Math.floor(curX10 / 10) + (deltaX10 > 0 ? 1 : -1)) * 10;
+  } else {
+    next = curX10 + deltaX10;
+  }
+  return Math.max(0, next);
+}
+
+/**
+ * 進捗ボタン。増減の計算は stepValueX10 で、UI上の便宜として、
+ * 現在値が最大を超えていない場合に限り最大で頭打ちにする。
  * 値が実際に変わったときだけ最終進捗日を今日にし、変わらなければ
  * 作品をそのまま（同じオブジェクトで）返す。
  */
 export function stepProgress(work: Work, deltaX10: number, today: string): Work {
   const cur = work.progressX10 ?? 0;
-  let next: number;
-  if (deltaX10 === 10 || deltaX10 === -10) {
-    next = (Math.floor(cur / 10) + (deltaX10 > 0 ? 1 : -1)) * 10;
-  } else {
-    next = cur + deltaX10;
-  }
-  if (next < 0) next = 0;
+  let next = stepValueX10(cur, deltaX10);
   if (work.maxX10 !== null && cur <= work.maxX10 && next > work.maxX10) next = work.maxX10;
   if (next === cur) return work;
   return {
@@ -218,9 +225,13 @@ export function isFinishedReading(work: Work): boolean {
   return work.isCompleted && work.maxX10 !== null && work.progressX10 === work.maxX10;
 }
 
-/** 「確認」操作: 新しい分が出ているかを確認し、最終チェック日だけを更新する。 */
-export function markChecked(work: Work, today: string): Work {
-  return work.lastCheckedDate === today ? work : { ...work, lastCheckedDate: today };
+/**
+ * 「確認」操作: 最終チェック日を今日にし、あわせて最大の変更も反映する。
+ * 最大も日付も変わらなければ、作品をそのまま（同じオブジェクトで）返す。
+ */
+export function applyCheck(work: Work, maxX10: number | null, today: string): Work {
+  if (work.maxX10 === maxX10 && work.lastCheckedDate === today) return work;
+  return { ...work, maxX10, lastCheckedDate: today };
 }
 
 /**

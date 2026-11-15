@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   applyEdits, decodeTextBuffer, findSimilarTitles, formatX10, hasUnread, isCaughtUp,
-  isFinishedReading, markChecked,
-  parseNewCsv, parseX10, stepProgress, todayLocal, unreadX10,
+  applyCheck, isFinishedReading,
+  parseNewCsv, parseX10, stepProgress, stepValueX10, todayLocal, unreadX10,
   worksFromJson, worksToCsv, worksToJson,
   type Work,
 } from './core';
@@ -286,24 +286,36 @@ function EditForm({ initial, isNew, existingWorks, onSave, onCancel }: EditFormP
 
 // ---------- メイン画面 ----------
 
-// ---------- 確認日ダイアログ ----------
+// ---------- 確認ダイアログ ----------
 
 function CheckDialog({ work, onConfirm, onCancel }: {
   work: Work;
-  onConfirm: (date: string) => void;
+  onConfirm: (maxX10: number | null) => void;
   onCancel: () => void;
 }) {
-  const [date, setDate] = useState(todayLocal());
+  const [maxX10, setMaxX10] = useState<number | null>(work.maxX10);
+  const step = (deltaX10: number) => {
+    if (maxX10 === null) {
+      // 未確認からの増分は0起点にする（減らす操作は受け付けない）。
+      if (deltaX10 > 0) setMaxX10(deltaX10);
+      return;
+    }
+    setMaxX10(stepValueX10(maxX10, deltaX10));
+  };
   return (
-    <Modal title="確認日を設定" onClose={onCancel}>
-      <p className="checkTarget">「{work.title}」の最終チェック日を記録します。</p>
-      <label className="checkDateLabel">最終チェック日
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-      </label>
-      <p className="note">日付を選んでOKするとその日が入ります。空欄のままOKすると今日になります。</p>
+    <Modal title="確認" onClose={onCancel}>
+      <p className="checkTarget">「{work.title}」の最終チェック日を今日で記録します。</p>
+      <p className="checkMaxLine">最大: {maxX10 === null ? '未確認' : `${formatX10(maxX10)} ${work.unit}`}</p>
+      <div className="stepper">
+        <button onClick={() => step(-10)} disabled={maxX10 === null} aria-label="最大を1減らす">−1</button>
+        <button onClick={() => step(-1)} disabled={maxX10 === null} aria-label="最大を0.1減らす">−0.1</button>
+        <button onClick={() => step(1)} aria-label="最大を0.1増やす">+0.1</button>
+        <button onClick={() => step(10)} aria-label="最大を1増やす">+1</button>
+      </div>
+      <p className="note">新しい分が出ていたら、最大を増やしてからOKしてください。何も変えずにOKすると、最終チェック日だけが今日になります。</p>
       <div className="modalActions">
         <button className="btn" onClick={onCancel}>キャンセル</button>
-        <button className="btn btnPrimary" onClick={() => onConfirm(date === '' ? todayLocal() : date)}>OK</button>
+        <button className="btn btnPrimary" onClick={() => onConfirm(maxX10)}>OK</button>
       </div>
     </Modal>
   );
@@ -655,15 +667,18 @@ export default function App() {
     });
   }
 
-  async function confirmCheck(dateStr: string) {
+  async function confirmCheck(maxX10: number | null) {
     const w = checking;
     setChecking(null);
     if (!w) return;
-    const next = markChecked(w, dateStr);
+    const today = todayLocal();
+    const next = applyCheck(w, maxX10, today);
     if (next === w) return;
     await updateWork(next);
     setToast({
-      message: `「${w.title}」を確認済みにしました（最終チェック日 = ${dateStr}）`,
+      message: next.maxX10 !== w.maxX10
+        ? `「${w.title}」の最大を ${w.maxX10 === null ? '未確認' : formatX10(w.maxX10)} → ${formatX10(next.maxX10)} に変更し、最終チェック日を記録しました`
+        : `「${w.title}」を確認済みにしました（最終チェック日 = ${today}）`,
       work: w, index: indexOf(w), deleted: false,
     });
   }

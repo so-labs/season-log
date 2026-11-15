@@ -748,21 +748,10 @@ body {
   font-size: 14.5px;
 }
 
-.checkDateLabel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.checkDateLabel input {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 14.5px;
-  background: var(--surface);
-  color: var(--ink);
+.checkMaxLine {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 /* 先頭へ戻るボタン: PCのみ（狭い画面では右下を追加ボタンが使う） */
