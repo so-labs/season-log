@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>プライバシーポリシー | Season Log</title>
+  <style>
+    body {
+      margin: 0;
+      background: #FAFAF9;
+      color: #1C1917;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.8;
+    }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    h1 {
+      font-size: 24px;
+      color: #0F766E;
+    }
+
+    h2 {
+      font-size: 17px;
+      margin-top: 32px;
+    }
+
+    p,
+    li {
+      font-size: 15px;
+    }
+
+    a {
+      color: #0F766E;
+    }
+
+    .date {
+      color: #57534E;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>プライバシーポリシー</h1>
+    <p class="date">Season Log（https://season-log.pages.dev/）におけるデータの取り扱いについて説明します。制定日: 2026年11月15日</p>
+
+    <h2>基本方針</h2>
+    <p>Season Log
+      は個人向けのWebアプリで、運営者が利用者のデータを収集するサーバーは持ちません。作品の進捗データは、利用者ご自身の端末と、利用者ご自身のクラウドストレージにのみ保存されます。アクセス解析ツールや広告も使用していません。</p>
+
+    <h2>ブラウザ内への保存</h2>
+    <p>登録した作品データは、お使いのブラウザ内（IndexedDB）に保存されます。テーマなどの設定はブラウザの localStorage
+      に保存されます。これらのデータが運営者や第三者に送信されることはありません。ブラウザのデータを消去すると、これらのデータも消えます。</p>
+
+    <h2>Google Drive 連携（任意機能）</h2>
+    <p>クラウド同期は任意の機能で、利用者が設定画面で接続した場合にのみ動作します。</p>
+    <ul>
+      <li>接続時に、Google Drive のアプリ専用領域（appDataFolder）へのアクセス許可（スコープ: drive.appdata）のみを求めます。利用者の他の Drive ファイルにはアクセスしません。
+      </li>
+      <li>同期は、利用者が「クラウドに保存」「クラウドから読み込む」などのボタンを押したときだけ行い、データはブラウザから Google Drive へ直接送受信されます。運営者のサーバーを経由することはありません。</li>
+      <li>保存されるのは、アプリが出力するJSONバックアップと同一形式の同期ファイル1つだけです。</li>
+      <li>認証に使うアクセストークンはブラウザのメモリ上にだけ保持し、保存はしません。</li>
+      <li>運営者が、利用者の Drive 内のデータにアクセスすることはできません。同期ファイルは Drive の設定「アプリの管理」から利用者ご自身で削除できます。</li>
+    </ul>
+
+    <h2>データのエクスポート</h2>
+    <p>作品データは、いつでもCSV / JSON形式でダウンロードできます。クラウド連携を使わなくても、ファイルによるバックアップと端末間の受け渡しが可能です。</p>
+
+    <h2>お問い合わせ</h2>
+    <p>本ポリシーやアプリに関するお問い合わせは、公開リポジトリ <a href="https://github.com/so-labs/season-log">github.com/so-labs/season-log</a>
+      からお願いします。</p>
+
+    <p><a href="/">Season Log に戻る</a></p>
+  </main>
+</body>
+
+</html>

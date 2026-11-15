@@ -11,6 +11,17 @@ import {
   applyImport, clearAllData, loadOrderedWorks, planImport, removeWork, restoreWork,
   saveNewWork, updateWork, type ImportPlan,
 } from './db';
+import {
+  CLOUD_SYNC_FILE_NAME, clearCloudSyncState, formatCloudDateTime,
+  getActiveCloudProviderId, getCloudLastSyncedAt, getCloudRemoteUpdatedAt,
+  setActiveCloudProviderId, setCloudLastSyncedAt, setCloudRemoteUpdatedAt,
+  type CloudProvider, type CloudRemoteMeta,
+} from './cloud';
+import { googleDriveProvider } from './cloud-google-drive';
+
+// 利用できるクラウド同期先の一覧。同期を有効にできるのは常に1つだけ。
+// 別のクラウドを足すときは、ここに実装を追加する。
+const CLOUD_PROVIDERS: CloudProvider[] = [googleDriveProvider];
 
 const CATEGORIES = ['アニメ', '漫画', '映画', 'ドラマ', '小説', '書籍', 'ゲーム', '音楽', 'その他'];
 const UNITS = ['話', '巻', '冊', '章', 'ページ', '本', '曲', '期', 'ステージ', '時間', '分', '%', 'その他'];
@@ -337,6 +348,18 @@ export default function App() {
   const [editing, setEditing] = useState<{ mode: 'new' } | { mode: 'edit'; original: Work } | null>(null);
   const [checking, setChecking] = useState<Work | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  // クラウド同期（手動のみ）: 有効なプロバイダは常に1つだけ。
+  const [cloudProviderId, setCloudProviderId] = useState(() => getActiveCloudProviderId());
+  const [cloudConnected, setCloudConnected] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState<string | null>(null);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [cloudNote, setCloudNote] = useState<string | null>(null);
+  const [cloudLastSynced, setCloudLastSynced] = useState(() => getCloudLastSyncedAt());
+  const [cloudRemoteMeta, setCloudRemoteMeta] = useState<CloudRemoteMeta | null>(null);
+  const [confirmingCloudOverwrite, setConfirmingCloudOverwrite] = useState(false);
+  // クラウドから読み込んだ取り込み待ちデータの出所（保存時に同期記録を更新するため）。
+  const [loadedFromCloud, setLoadedFromCloud] = useState<CloudRemoteMeta | null>(null);
+  const activeCloudProvider = CLOUD_PROVIDERS.find(p => p.id === cloudProviderId) ?? null;
 
   useEffect(() => {
     if (!toast) return;
@@ -444,6 +467,7 @@ export default function App() {
   async function onFile(file: File) {
     setError(null);
     setSavedNote(null);
+    setLoadedFromCloud(null);
     try {
       const text = decodeTextBuffer(await file.arrayBuffer());
       if (file.name.toLowerCase().endsWith('.json')) {
@@ -466,7 +490,139 @@ export default function App() {
         ? `保存しました: 全${plan.added}件を入れ替えました`
         : `保存しました: 追加 ${plan.added}件 / 更新 ${plan.updated}件 / 変更なし ${plan.unchanged}件`,
     );
+    if (loadedFromCloud) {
+      // クラウドから読み込んだ分は、その時点のクラウドの状態を把握済みとして記録する。
+      const now = new Date().toISOString();
+      setCloudRemoteUpdatedAt(loadedFromCloud.updatedAt);
+      setCloudLastSyncedAt(now);
+      setCloudLastSynced(now);
+      setCloudRemoteMeta(loadedFromCloud);
+      setLoadedFromCloud(null);
+    }
     setLoaded(null);
+  }
+
+  // ----- クラウド同期（手動のみ。自動同期はしない） -----
+
+  async function handleCloudConnect(provider: CloudProvider) {
+    setCloudError(null);
+    setCloudNote(null);
+    setCloudBusy('接続しています…');
+    try {
+      await provider.connect();
+      setActiveCloudProviderId(provider.id);
+      setCloudProviderId(provider.id);
+      setCloudConnected(true);
+      const meta = await provider.findSyncFile();
+      setCloudRemoteMeta(meta);
+      setCloudNote(meta
+        ? `${provider.label}に接続しました。クラウドには ${formatCloudDateTime(meta.updatedAt)} 更新の同期ファイルがあります。`
+        : `${provider.label}に接続しました。クラウドにはまだ同期ファイルがありません。`);
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCloudBusy(null);
+    }
+  }
+
+  function handleCloudDisconnect() {
+    if (!activeCloudProvider) return;
+    activeCloudProvider.disconnect();
+    clearCloudSyncState();
+    setCloudProviderId(null);
+    setCloudConnected(false);
+    setCloudRemoteMeta(null);
+    setCloudLastSynced(null);
+    setLoadedFromCloud(null);
+    setCloudError(null);
+    setCloudNote('クラウド同期の接続を解除しました。クラウド上のファイルは消えていません。');
+  }
+
+  // 保存・読み込み・コピーの共通前処理: 接続が切れていたら繋ぎ直す。
+  async function ensureCloudConnected(provider: CloudProvider): Promise<void> {
+    if (!provider.isConnected()) await provider.connect();
+    setCloudConnected(true);
+  }
+
+  async function handleCloudSave(force: boolean) {
+    const provider = activeCloudProvider;
+    if (!provider) return;
+    setCloudError(null);
+    setCloudNote(null);
+    setCloudBusy('クラウドを確認しています…');
+    try {
+      await ensureCloudConnected(provider);
+      const meta = await provider.findSyncFile();
+      setCloudRemoteMeta(meta);
+      if (!force && meta && meta.updatedAt !== getCloudRemoteUpdatedAt()) {
+        // この端末が把握している版とクラウドの実物が違う＝他の端末で
+        // 更新された可能性があるため、上書き前に確認する。
+        setConfirmingCloudOverwrite(true);
+        return;
+      }
+      setCloudBusy('クラウドに保存しています…');
+      const saved = await provider.uploadSyncFile(worksToJson(stored), meta);
+      const now = new Date().toISOString();
+      setCloudRemoteUpdatedAt(saved.updatedAt);
+      setCloudLastSyncedAt(now);
+      setCloudLastSynced(now);
+      setCloudRemoteMeta(saved);
+      setCloudNote(`${provider.label}に保存しました（${formatCloudDateTime(saved.updatedAt)}）。`);
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCloudBusy(null);
+    }
+  }
+
+  async function handleCloudLoad() {
+    const provider = activeCloudProvider;
+    if (!provider) return;
+    setCloudError(null);
+    setCloudNote(null);
+    setCloudBusy('クラウドから読み込んでいます…');
+    try {
+      await ensureCloudConnected(provider);
+      const meta = await provider.findSyncFile();
+      setCloudRemoteMeta(meta);
+      if (!meta) {
+        setCloudError('クラウドにはまだ同期ファイルがありません。先に「クラウドに保存」を実行してください。');
+        return;
+      }
+      const text = await provider.downloadSyncFile(meta.id);
+      setLoaded({ works: worksFromJson(text), sourceName: `${provider.label} の同期ファイル`, format: 'json' });
+      setLoadedFromCloud(meta);
+      setCloudNote('クラウドの内容を取り込み待ちにしました。下の確認欄で保存方法を選んでください。');
+    } catch (e) {
+      setLoadedFromCloud(null);
+      setCloudError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCloudBusy(null);
+    }
+  }
+
+  async function handleCloudDownloadCopy() {
+    const provider = activeCloudProvider;
+    if (!provider) return;
+    setCloudError(null);
+    setCloudNote(null);
+    setCloudBusy('クラウドから取得しています…');
+    try {
+      await ensureCloudConnected(provider);
+      const meta = await provider.findSyncFile();
+      setCloudRemoteMeta(meta);
+      if (!meta) {
+        setCloudError('クラウドにはまだ同期ファイルがありません。先に「クラウドに保存」を実行してください。');
+        return;
+      }
+      const text = await provider.downloadSyncFile(meta.id);
+      download(CLOUD_SYNC_FILE_NAME, text, 'application/json');
+      setCloudNote('クラウドの内容をファイルとしてダウンロードしました（この端末のデータは変更していません）。');
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCloudBusy(null);
+    }
   }
 
   async function confirmClearAll() {
@@ -701,7 +857,7 @@ export default function App() {
                       <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
                     </>
                   )}
-                  <button className="btn" onClick={() => setLoaded(null)}>保存しない</button>
+                  <button className="btn" onClick={() => { setLoaded(null); setLoadedFromCloud(null); }}>保存しない</button>
                 </div>
                 <ul className="previewList">
                   {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
@@ -718,6 +874,42 @@ export default function App() {
               <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
             </div>
             <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
+          </section>
+          <div className="settingsSeparator" />
+          <section className="settingsSection">
+            <h2 className="settingsSubheading">クラウド同期</h2>
+            {!activeCloudProvider && (
+              <>
+                <p className="note">JSONバックアップをクラウドに保存して、他の端末と受け渡しできます。同期はボタンを押したときだけ行います（自動同期はしません）。利用できるクラウドは1つだけです。</p>
+                <div className="panelRow">
+                  {CLOUD_PROVIDERS.map(p => (
+                    <button key={p.id} className="btn" disabled={cloudBusy !== null || !p.isConfigured()} onClick={() => void handleCloudConnect(p)}>{p.label}に接続</button>
+                  ))}
+                </div>
+                {CLOUD_PROVIDERS.some(p => !p.isConfigured()) && (
+                  <p className="note">未設定のクラウドは利用できません（デプロイ環境の環境変数で、接続に必要なIDを設定してください）。</p>
+                )}
+              </>
+            )}
+            {activeCloudProvider && (
+              <>
+                <p className="note">
+                  接続先: {activeCloudProvider.label}（{cloudConnected ? '接続済み' : '未接続 — 操作時に自動で接続します'}）
+                  {cloudLastSynced && <><br />最終同期: {formatCloudDateTime(cloudLastSynced)}</>}
+                  {cloudRemoteMeta && <><br />クラウドの同期ファイル: {formatCloudDateTime(cloudRemoteMeta.updatedAt)} 更新</>}
+                </p>
+                <div className="panelRow">
+                  <button className="btn btnPrimary" disabled={cloudBusy !== null || stored.length === 0} onClick={() => void handleCloudSave(false)}>クラウドに保存</button>
+                  <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudLoad()}>クラウドから読み込む</button>
+                  <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudDownloadCopy()}>クラウドの内容をダウンロード</button>
+                  <button className="btn" disabled={cloudBusy !== null} onClick={handleCloudDisconnect}>接続を解除</button>
+                </div>
+                <p className="note">読み込むと、ファイルの取り込みと同じ確認欄が出て、保存方法（IDで照合／すべて入れ替え）を選べます。「クラウドの内容をダウンロード」は、この端末のデータを変えずに同期ファイルのコピーを保存します。接続を解除しても、クラウド上のファイルは消えません。</p>
+              </>
+            )}
+            {cloudBusy && <p className="note" role="status">{cloudBusy}</p>}
+            {cloudError && <p className="error" role="alert">{cloudError}</p>}
+            {cloudNote && <p className="ok">{cloudNote}</p>}
           </section>
           {appVersion && <p className="versionLine">Ver {appVersion}</p>}
         </Modal>
@@ -787,6 +979,16 @@ export default function App() {
           work={checking}
           onConfirm={d => void confirmCheck(d)}
           onCancel={() => setChecking(null)}
+        />
+      )}
+
+      {confirmingCloudOverwrite && activeCloudProvider && (
+        <ConfirmDialog
+          title="クラウド保存の確認"
+          message={`クラウド上の同期ファイルは、この端末が最後に把握した状態より新しくなっています（${cloudRemoteMeta ? formatCloudDateTime(cloudRemoteMeta.updatedAt) : ''} 更新）。他の端末で更新された内容が、上書きで消える可能性があります。この端末の内容で上書きしますか？`}
+          confirmLabel="上書きして保存する"
+          onConfirm={() => { setConfirmingCloudOverwrite(false); void handleCloudSave(true); }}
+          onCancel={() => setConfirmingCloudOverwrite(false)}
         />
       )}
 
