@@ -115,6 +115,53 @@ export function unreadX10(work: Pick<Work, 'progressX10' | 'maxX10'>): number | 
   return Math.max(0, work.maxX10 - work.progressX10);
 }
 
+// ---------- タイトルの類似チェック（新規登録時の注意喚起用） ----------
+
+/**
+ * 比較用にタイトルを正規化する: 全角半角と大文字小文字を統一し、空白と記号を取り除く。
+ * 「〇〇物語」と「〇〇物語！」のような表記ゆれを、同じ土俵で比べられるようにするため。
+ */
+export function normalizeTitleForCompare(title: string): string {
+  return title.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+function levenshtein(a: string[], b: string[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** 正規化したタイトル同士の類似度（0〜1。1が完全一致）。 */
+export function titleSimilarity(a: string, b: string): number {
+  const na = normalizeTitleForCompare(a);
+  const nb = normalizeTitleForCompare(b);
+  if (na === '' || nb === '') return 0;
+  if (na === nb) return 1;
+  const dist = levenshtein([...na], [...nb]);
+  let score = 1 - dist / Math.max(na.length, nb.length);
+  // 一方が他方を含む場合（副題や続編表記の有無など）は、短い側が3文字以上あれば候補に含める。
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (shorter.length >= 3 && longer.includes(shorter)) score = Math.max(score, 0.8);
+  return score;
+}
+
+/** 入力タイトルに似た既存作品を、類似度の高い順に最大 limit 件返す（同点は保存順）。 */
+export function findSimilarTitles(works: Work[], title: string, limit = 3): Work[] {
+  if (normalizeTitleForCompare(title).length < 2) return [];
+  return works
+    .map(w => ({ w, score: titleSimilarity(title, w.title) }))
+    .filter(x => x.score >= 0.8)
+    .sort((x, y) => y.score - x.score)
+    .slice(0, limit)
+    .map(x => x.w);
+}
+
 // ---------- アプリ内編集（進捗ボタン・日付ルール） ----------
 
 /** ローカルタイムゾーンでの今日を YYYY-MM-DD 形式で返す。 */
@@ -192,8 +239,8 @@ export function applyEdits(original: Work, draft: Work, today: string): Work {
   // 進捗ボタンと同じ補完ルール: 進捗が動き、最終チェック日が空欄で
   // （かつ手編集されていない）場合、確定した進捗日で埋める。
   if (draft.progressX10 !== original.progressX10
-      && draft.lastCheckedDate === original.lastCheckedDate
-      && out.lastCheckedDate === null && out.lastProgressDate !== null) {
+    && draft.lastCheckedDate === original.lastCheckedDate
+    && out.lastCheckedDate === null && out.lastProgressDate !== null) {
     out.lastCheckedDate = out.lastProgressDate;
   }
   return out;

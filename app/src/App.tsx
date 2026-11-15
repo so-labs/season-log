@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  applyEdits, decodeTextBuffer, formatX10, hasUnread, isCaughtUp,
+  applyEdits, decodeTextBuffer, findSimilarTitles, formatX10, hasUnread, isCaughtUp,
   isFinishedReading, markChecked,
   parseNewCsv, parseX10, stepProgress, todayLocal, unreadX10,
   worksFromJson, worksToCsv, worksToJson,
@@ -199,11 +199,12 @@ function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: {
 interface EditFormProps {
   initial: Work;
   isNew: boolean;
+  existingWorks: Work[];
   onSave: (draft: Work) => void;
   onCancel: () => void;
 }
 
-function EditForm({ initial, isNew, onSave, onCancel }: EditFormProps) {
+function EditForm({ initial, isNew, existingWorks, onSave, onCancel }: EditFormProps) {
   const [title, setTitle] = useState(initial.title);
   const [category, setCategory] = useState(initial.category);
   const [unit, setUnit] = useState(initial.unit);
@@ -217,6 +218,11 @@ function EditForm({ initial, isNew, onSave, onCancel }: EditFormProps) {
   const [progressDate, setProgressDate] = useState(initial.lastProgressDate ?? '');
   const [memo, setMemo] = useState(initial.memo);
   const [formError, setFormError] = useState<string | null>(null);
+  // 新規登録のときだけ、似たタイトルの既存作品を知らせる（登録自体は妨げない）。
+  const similar = useMemo(
+    () => (isNew ? findSimilarTitles(existingWorks, title) : []),
+    [isNew, existingWorks, title],
+  );
 
   function submit() {
     if (title.trim() === '') { setFormError('タイトルを入力してください'); return; }
@@ -241,6 +247,9 @@ function EditForm({ initial, isNew, onSave, onCancel }: EditFormProps) {
     <Modal title={isNew ? '新規登録' : '編集'} onClose={onCancel}>
       <div className="formGrid">
         <label className="wide">タイトル <input type="text" value={title} onChange={e => setTitle(e.target.value)} /></label>
+        {similar.length > 0 && (
+          <p className="note wide">似たタイトルが登録済みです: {similar.map(w => `「${w.title}」（${w.category}）`).join('、')}。別の作品であれば、そのまま登録できます。</p>
+        )}
         <label>カテゴリ
           <select value={category} onChange={e => setCategory(e.target.value)}>
             {!CATEGORIES.includes(category) && <option>{category}</option>}
@@ -969,6 +978,7 @@ export default function App() {
           key={editing.mode === 'edit' ? editing.original.id : 'new'}
           initial={editing.mode === 'edit' ? editing.original : blankWork()}
           isNew={editing.mode === 'new'}
+          existingWorks={stored}
           onSave={d => void handleFormSave(d)}
           onCancel={() => setEditing(null)}
         />
