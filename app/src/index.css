@@ -889,6 +889,11 @@ body {
     display: none;
   }
 
+  /* 件数サマリは検索モーダルの中だけに出す（ページ上のものは隠す） */
+  .app > .summary {
+    display: none;
+  }
+
   .fabAdd {
     display: flex;
     align-items: center;

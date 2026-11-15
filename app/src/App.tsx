@@ -536,6 +536,17 @@ export default function App() {
     };
   }
 
+  // 件数サマリ: ページ上と検索モーダルで同じ部品を使う（狭い画面ではページ上は隠し、モーダル内だけに出す）
+  const summaryLine = (
+    <section className="summary" aria-label="概要">
+      <span>全 {storedStats.total} 件</span>
+      <span>★ {storedStats.favorite}</span>
+      <span>完結 {storedStats.completed}</span>
+      <span>アダルト {storedStats.adult}</span>
+      <span>非表示 {storedStats.hidden}</span>
+    </section>
+  );
+
   // 検索ボックスと絞り込み一式: ページ上（PC）と検索モーダル（狭い画面）で同じ部品を使う
   const filterControls = (
     <>
@@ -710,6 +721,7 @@ export default function App() {
       {showSearch && (
         <Modal title="検索と絞り込み" onClose={() => setShowSearch(false)}>
           {filterControls}
+          {summaryLine}
           <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
           <div className="modalActions">
             <button className="btn" onClick={resetFilters} disabled={!filtersActive}>条件をリセット</button>
@@ -720,13 +732,7 @@ export default function App() {
 
       {savedNote && <p className="ok banner">{savedNote}</p>}
 
-      <section className="summary" aria-label="概要">
-        <span>全 {storedStats.total} 件</span>
-        <span>★ {storedStats.favorite}</span>
-        <span>完結 {storedStats.completed}</span>
-        <span>アダルト {storedStats.adult}</span>
-        <span>非表示 {storedStats.hidden}</span>
-      </section>
+      {summaryLine}
 
       <section className="filters" aria-label="検索と絞り込み">
         {filterControls}
