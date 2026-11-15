@@ -13,7 +13,10 @@ import {
 } from './cloud';
 
 const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
-const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+// drive.appdata に加えてメールアドレスの表示も求める。メールアドレスは、
+// 次回接続時にアカウント選択を省くための控え（login_hint）としてだけ使う。
+const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email';
+const LOGIN_HINT_KEY = 'season-log:cloud-google-drive-login-hint';
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const DRIVE_API_BASE = 'https://www.googleapis.com';
 
@@ -24,7 +27,7 @@ interface GisTokenResponse {
   error?: string;
 }
 interface GisTokenClient {
-  requestAccessToken(params: { prompt: string }): void;
+  requestAccessToken(params: { prompt: string; login_hint?: string }): void;
 }
 interface GisOAuth2 {
   initTokenClient(config: {
@@ -94,28 +97,45 @@ async function requestAccessToken(): Promise<string> {
         accessToken = response.access_token;
         accessTokenExpiresAt = Date.now() + (response.expires_in ?? 3600) * 1000;
         pending.resolve(accessToken);
+        // アカウントの控えが無ければ、ベストエフォートで取得しておく（失敗しても同期は続行）。
+        if (!localStorage.getItem(LOGIN_HINT_KEY)) void rememberLoginHint(accessToken);
       },
-      error_callback: () => {
+      error_callback: error => {
         const pending = pendingTokenRequest;
         pendingTokenRequest = null;
-        pending?.reject(new Error('Googleアカウントの認証がキャンセルされました。'));
+        if (!pending) return;
+        if (error?.type === 'popup_failed_to_open') {
+          pending.reject(new Error('認証用のポップアップを開けませんでした。ブラウザの設定で、このサイトのポップアップを許可してください。'));
+        } else if (error?.type === 'popup_closed') {
+          pending.reject(new Error('Googleアカウントの認証がキャンセルされました。'));
+        } else {
+          pending.reject(new Error('Googleアカウントの認証に失敗しました。'));
+        }
       },
     });
   }
-  const requestOnce = (prompt: string) =>
-    new Promise<string>((resolve, reject) => {
-      pendingTokenRequest = { resolve, reject };
-      tokenClient!.requestAccessToken({ prompt });
-    });
-  // まず 'none' で静かな再認証を試す。同意済みでGoogleにサインインしていれば、
-  // アカウント選択などの画面を出さずにトークンを再取得できる。
-  // 静かに取得できない場合だけ、対話的（空文字）に切り替えて画面を出す。
-  // トークンはメモリ上にしか持たないため、この再認証はアプリを開き直すたびに走る。
+  // 認証リクエストは、ボタンのクリックから直接1回だけ行う。
+  // 試行を重ねるとクリックのジェスチャが消費されて、後続のポップアップが
+  // ブラウザにブロックされてしまうため、二段構えにはしない。
+  // 代わりに、前回接続したアカウントの控え（login_hint）を渡して、
+  // Google側でアカウント選択を省けるようにする。
+  const hint = localStorage.getItem(LOGIN_HINT_KEY) ?? undefined;
+  return new Promise<string>((resolve, reject) => {
+    pendingTokenRequest = { resolve, reject };
+    tokenClient!.requestAccessToken({ prompt: '', login_hint: hint });
+  });
+}
+
+/** 接続したアカウントのメールアドレスを、次回の login_hint 用に控える（失敗は無視）。 */
+async function rememberLoginHint(token: string): Promise<void> {
   try {
-    return await requestOnce('none');
-  } catch {
-    return requestOnce('');
-  }
+    const res = await fetch(`${DRIVE_API_BASE}/oauth2/v3/userinfo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { email?: string };
+    if (data.email) localStorage.setItem(LOGIN_HINT_KEY, data.email);
+  } catch { /* 控えは無くても同期できるので、失敗しても何もしない */ }
 }
 
 async function driveRequest(path: string, init: RequestInit = {}): Promise<Response> {
@@ -206,6 +226,7 @@ export const googleDriveProvider: CloudProvider = {
     const token = accessToken;
     accessToken = null;
     accessTokenExpiresAt = 0;
+    localStorage.removeItem(LOGIN_HINT_KEY);
     if (token && window.google?.accounts?.oauth2) {
       try {
         window.google.accounts.oauth2.revoke(token, () => { /* 破棄結果は問わない */ });
