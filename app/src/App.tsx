@@ -321,7 +321,7 @@ export default function App() {
   });
   const [viewKey, setViewKey] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sortKey, setSortKey] = useState('order');
+  const [sortKey, setSortKey] = useState('orderDesc');
   type ThemePref = 'light' | 'system' | 'dark';
   const [themePref, setThemePref] = useState<ThemePref>(() => {
     const v = localStorage.getItem('season-log:theme');
@@ -424,16 +424,37 @@ export default function App() {
       (q === '' || w.title.toLowerCase().includes(q) || w.memo.toLowerCase().includes(q)),
     );
     const sorted = [...list];
-    if (sortKey === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
-    else if (sortKey === 'unread') sorted.sort((a, b) => (unreadX10(b) ?? -1) - (unreadX10(a) ?? -1));
-    else if (sortKey === 'progressDate') sorted.sort((a, b) => (b.lastProgressDate ?? '').localeCompare(a.lastProgressDate ?? ''));
-    else if (sortKey === 'checkDate') sorted.sort((a, b) => (a.lastCheckedDate ?? '').localeCompare(b.lastCheckedDate ?? ''));
+    // 並び替え: どのキーでも両方向を選べる。同点の場合は保存順を保つ（安定ソート）。
+    // 日付なしは「最も古い」扱いにする（新しい順では末尾、古い順では先頭）。
+    // 残りは、最大が未確認で計算できない作品を、多い順・少ない順のどちらでも末尾に置く。
+    const byDate = (get: (w: Work) => string | null, dir: 1 | -1) =>
+      (a: Work, b: Work) => dir * (get(a) ?? '').localeCompare(get(b) ?? '');
+    const byUnread = (dir: 1 | -1) => (a: Work, b: Work) => {
+      const ua = unreadX10(a);
+      const ub = unreadX10(b);
+      if (ua === null && ub === null) return 0;
+      if (ua === null) return 1;
+      if (ub === null) return -1;
+      return dir * (ua - ub);
+    };
+    switch (sortKey) {
+      case 'orderDesc': sorted.reverse(); break;
+      case 'titleAsc': sorted.sort((a, b) => a.title.localeCompare(b.title, 'ja')); break;
+      case 'titleDesc': sorted.sort((a, b) => b.title.localeCompare(a.title, 'ja')); break;
+      case 'unreadDesc': sorted.sort(byUnread(-1)); break;
+      case 'unreadAsc': sorted.sort(byUnread(1)); break;
+      case 'progressDesc': sorted.sort(byDate(w => w.lastProgressDate, -1)); break;
+      case 'progressAsc': sorted.sort(byDate(w => w.lastProgressDate, 1)); break;
+      case 'checkAsc': sorted.sort(byDate(w => w.lastCheckedDate, 1)); break;
+      case 'checkDesc': sorted.sort(byDate(w => w.lastCheckedDate, -1)); break;
+      default: break; // orderAsc は保存順のまま
+    }
     return sorted;
   }, [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
 
   // 絞り込みが既定以外になっているか（検索ボタンのドット表示と、リセットの可否に使う）
   const filtersActive =
-    query.trim() !== '' || viewKey !== 'all' || categoryFilter !== 'all' || sortKey !== 'order' ||
+    query.trim() !== '' || viewKey !== 'all' || categoryFilter !== 'all' || sortKey !== 'orderDesc' ||
     flagFilters.favorite !== 'any' || flagFilters.completed !== 'any' ||
     flagFilters.adult !== 'any' || flagFilters.hidden !== 'exclude';
 
@@ -441,7 +462,7 @@ export default function App() {
     setQuery('');
     setViewKey('all');
     setCategoryFilter('all');
-    setSortKey('order');
+    setSortKey('orderDesc');
     setFlagFilters({
       favorite: 'any',
       completed: 'any',
@@ -713,11 +734,16 @@ export default function App() {
         </label>
         <label>並び順
           <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
-            <option value="order">保存順</option>
-            <option value="title">タイトル順</option>
-            <option value="unread">残りが多い順</option>
-            <option value="progressDate">最終進捗日が新しい順</option>
-            <option value="checkDate">最終チェック日が古い順</option>
+            <option value="orderDesc">保存順（新しい順）</option>
+            <option value="orderAsc">保存順（古い順）</option>
+            <option value="titleAsc">タイトル順</option>
+            <option value="titleDesc">タイトル逆順</option>
+            <option value="unreadDesc">残りが多い順</option>
+            <option value="unreadAsc">残りが少ない順</option>
+            <option value="progressDesc">最終進捗日が新しい順</option>
+            <option value="progressAsc">最終進捗日が古い順</option>
+            <option value="checkAsc">最終チェック日が古い順</option>
+            <option value="checkDesc">最終チェック日が新しい順</option>
           </select>
         </label>
         {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
