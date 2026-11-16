@@ -438,7 +438,7 @@ export default function App() {
     return seen;
   }, [stored]);
 
-  const visible = useMemo(() => {
+  const sortedVisible = useMemo(() => {
     const views: Record<string, (w: Work) => boolean> = {
       all: () => true,
       check: w => !w.isCompleted,
@@ -491,6 +491,38 @@ export default function App() {
     }
     return sorted;
   }, [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
+
+  // 表示順の固定: 並び順が値に依存する場合（残り順・最終進捗日順など）、進捗や
+  // 日付の変更でその場で並び替えると、操作中のカードが移動して誤操作の原因になる。
+  // そのため、絞り込み・並び順の条件と、作品の顔ぶれ（IDの並び）が変わったときだけ
+  // 表示順を計算し直し、それ以外のデータ変更では順番と顔ぶれを固定したまま、
+  // カードの中身（進捗・日付など）だけを最新の値に追随させる。
+  const storedIdSignature = stored.map(w => w.id).join(',');
+  const displayKey = JSON.stringify([
+    query,
+    viewKey,
+    categoryFilter,
+    sortKey,
+    flagFilters,
+    storedIdSignature,
+  ]);
+  const [displayState, setDisplayState] = useState<{
+    key: string;
+    ids: string[];
+  } | null>(null);
+  if (displayState === null || displayState.key !== displayKey) {
+    // 条件が変わったときだけ、表示中のレンダーで state を調整して並び直す
+    // （エフェクトで直すと、一瞬だけ古い並びが描画されてしまうため）。
+    setDisplayState({
+      key: displayKey,
+      ids: sortedVisible.map(w => w.id),
+    });
+  }
+  const visible = displayState !== null && displayState.key === displayKey
+    ? displayState.ids
+      .map(id => stored.find(w => w.id === id))
+      .filter((w): w is Work => w !== undefined)
+    : sortedVisible;
 
   // 絞り込みが既定以外になっているか（検索ボタンのドット表示と、リセットの可否に使う）
   const filtersActive =
