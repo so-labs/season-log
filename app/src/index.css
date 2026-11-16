@@ -470,8 +470,47 @@ body {
   margin-bottom: 6px;
 }
 
-.filtersReset {
+/* 並び順・絞り込みのアコーディオン（PC）: 開いた中は下書きで、「適用」まで反映しない */
+.filterAccordion {
   margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.filterAccordionHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filterAccordionChevron {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filterPanel {
+  padding: 0 14px 12px;
+}
+
+.filterPanel .filterRow {
+  margin-top: 2px;
+}
+
+.filterPanelActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .searchBox {

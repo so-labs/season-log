@@ -363,6 +363,18 @@ export default function App() {
     return v !== null && SORT_OPTIONS.some(o => o.value === v) ? v : 'orderDesc';
   });
   useEffect(() => { localStorage.setItem('season-log:sort', sortKey); }, [sortKey]);
+  // 並び順・絞り込みの下書き: パネルやモーダルで編集しても、「適用」を押すまでは
+  // 一覧（適用済みの条件）に反映しない。開くたびに適用済みの条件から作り直す。
+  // PCの一覧上の検索ボックスだけは適用済みを直接編集する（即時反映）。
+  const [draftQuery, setDraftQuery] = useState('');
+  const [draftViewKey, setDraftViewKey] = useState('all');
+  const [draftCategoryFilter, setDraftCategoryFilter] = useState('all');
+  const [draftSortKey, setDraftSortKey] = useState('orderDesc');
+  const [draftFlagFilters, setDraftFlagFilters] = useState<Record<'favorite' | 'completed' | 'adult' | 'hidden', FlagMode>>({
+    favorite: 'any', completed: 'any', adult: 'any', hidden: 'exclude',
+  });
+  // PCの並び順・絞り込みアコーディオンの開閉。
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   type ThemePref = 'light' | 'system' | 'dark';
   const [themePref, setThemePref] = useState<ThemePref>(() => {
     const v = localStorage.getItem('season-log:theme');
@@ -439,7 +451,16 @@ export default function App() {
     return seen;
   }, [stored]);
 
-  const sortedVisible = useMemo(() => {
+  // 条件（適用済み／下書き）を受け取って、絞り込み＋並び替えした一覧を返す。
+  // 適用済みの一覧と、下書きの件数プレビューの両方で使う。
+  type FilterValues = {
+    query: string;
+    viewKey: string;
+    categoryFilter: string;
+    sortKey: string;
+    flags: Record<'favorite' | 'completed' | 'adult' | 'hidden', FlagMode>;
+  };
+  const listFor = (values: FilterValues): Work[] => {
     const views: Record<string, (w: Work) => boolean> = {
       all: () => true,
       check: w => !w.isCompleted,
@@ -453,15 +474,15 @@ export default function App() {
       adult: w => w.hasAdult,
       hidden: w => w.isHidden,
     };
-    const flagOk = (w: Work) => (Object.keys(flagFilters) as (keyof typeof flagFilters)[]).every(k => {
-      const mode = flagFilters[k];
+    const flagOk = (w: Work) => (Object.keys(values.flags) as (keyof typeof values.flags)[]).every(k => {
+      const mode = values.flags[k];
       return mode === 'any' || (mode === 'only') === flagValue[k](w);
     });
-    const q = query.trim().toLowerCase();
+    const q = values.query.trim().toLowerCase();
     const list = stored.filter(w =>
       flagOk(w) &&
-      (views[viewKey] ?? views.all)(w) &&
-      (categoryFilter === 'all' || w.category === categoryFilter) &&
+      (views[values.viewKey] ?? views.all)(w) &&
+      (values.categoryFilter === 'all' || w.category === values.categoryFilter) &&
       (q === '' || w.title.toLowerCase().includes(q) || w.memo.toLowerCase().includes(q)),
     );
     const sorted = [...list];
@@ -478,7 +499,7 @@ export default function App() {
       if (ub === null) return -1;
       return dir * (ua - ub);
     };
-    switch (sortKey) {
+    switch (values.sortKey) {
       case 'orderDesc': sorted.reverse(); break;
       case 'titleAsc': sorted.sort((a, b) => a.title.localeCompare(b.title, 'ja')); break;
       case 'titleDesc': sorted.sort((a, b) => b.title.localeCompare(a.title, 'ja')); break;
@@ -491,13 +512,30 @@ export default function App() {
       default: break; // orderAsc は保存順のまま
     }
     return sorted;
-  }, [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
+  };
+
+  const sortedVisible = useMemo(() => listFor({
+    query,
+    viewKey,
+    categoryFilter,
+    sortKey,
+    flags: flagFilters,
+  }), [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
+
+  // 下書き条件での件数プレビュー（モーダルとアコーディオンで使う）。
+  const draftVisible = useMemo(() => listFor({
+    query: draftQuery,
+    viewKey: draftViewKey,
+    categoryFilter: draftCategoryFilter,
+    sortKey: draftSortKey,
+    flags: draftFlagFilters,
+  }), [stored, draftFlagFilters, draftViewKey, draftCategoryFilter, draftQuery, draftSortKey]);
 
   // 表示順の固定: 並び順が値に依存する場合（残り順・最終進捗日順など）、進捗や
   // 日付の変更でその場で並び替えると、操作中のカードが移動して誤操作の原因になる。
-  // そのため、絞り込み・並び順の条件と、作品の顔ぶれ（IDの並び）が変わったときだけ
-  // 表示順を計算し直し、それ以外のデータ変更では順番と顔ぶれを固定したまま、
-  // カードの中身（進捗・日付など）だけを最新の値に追随させる。
+  // そのため、適用済みの絞り込み・並び順の条件と、作品の顔ぶれ（IDの並び）が
+  // 変わったときだけ表示順を計算し直し、それ以外のデータ変更では順番と顔ぶれを
+  // 固定したまま、カードの中身（進捗・日付など）だけを最新の値に追随させる。
   const storedIdSignature = stored.map(w => w.id).join(',');
   const displayKey = JSON.stringify([
     query,
@@ -531,6 +569,36 @@ export default function App() {
     flagFilters.favorite !== 'any' || flagFilters.completed !== 'any' ||
     flagFilters.adult !== 'any' || flagFilters.hidden !== 'exclude';
 
+  // 下書きを適用済みの条件から作り直す（パネル／モーダルを開くときに呼ぶ）。
+  function snapshotDraft() {
+    setDraftQuery(query);
+    setDraftViewKey(viewKey);
+    setDraftCategoryFilter(categoryFilter);
+    setDraftSortKey(sortKey);
+    setDraftFlagFilters(flagFilters);
+  }
+
+  // 下書きを適用済みに反映する。PCのアコーディオンでは検索ボックスが適用済みを
+  // 直接編集しているため、検索語は下書きで上書きしない（includeQuery = false）。
+  function applyDraft(includeQuery: boolean) {
+    if (includeQuery) setQuery(draftQuery);
+    setViewKey(draftViewKey);
+    setCategoryFilter(draftCategoryFilter);
+    setSortKey(draftSortKey);
+    setFlagFilters(draftFlagFilters);
+  }
+
+  // 下書きが適用済みと違うか（未適用の変更の表示と、適用ボタンの可否に使う）。
+  const draftFlagsDirty =
+    (Object.keys(flagFilters) as (keyof typeof flagFilters)[]).some(k => draftFlagFilters[k] !== flagFilters[k]);
+  const draftDirtyPanel =
+    draftViewKey !== viewKey || draftCategoryFilter !== categoryFilter ||
+    draftSortKey !== sortKey || draftFlagsDirty;
+  const draftDirtyModal = draftDirtyPanel || draftQuery !== query;
+
+  // 適用済みの並び順の表示名（アコーディオンの見出しに出す）。
+  const appliedSortLabel = SORT_OPTIONS.find(o => o.value === sortKey)?.label ?? '';
+
   function resetFilters() {
     setQuery('');
     setViewKey('all');
@@ -542,6 +610,22 @@ export default function App() {
       adult: 'any',
       hidden: 'exclude',
     });
+    setDraftQuery('');
+    setDraftViewKey('all');
+    setDraftCategoryFilter('all');
+    setDraftSortKey('orderDesc');
+    setDraftFlagFilters({
+      favorite: 'any',
+      completed: 'any',
+      adult: 'any',
+      hidden: 'exclude',
+    });
+  }
+
+  // PCのアコーディオンの開閉: 開くときに下書きを作り直す。
+  function toggleFilterPanel() {
+    if (!showFilterPanel) snapshotDraft();
+    setShowFilterPanel(!showFilterPanel);
   }
 
   // 一覧の先頭へ滑らかに戻る
@@ -552,8 +636,9 @@ export default function App() {
     });
   }
 
-  // 検索モーダルの「結果を表示」: 閉じて一覧の先頭へ戻る
+  // 検索モーダルの「結果を表示」: 下書きを適用して閉じ、一覧の先頭へ戻る
   function showSearchResults() {
+    applyDraft(true);
     setShowSearch(false);
     scrollToTop();
   }
@@ -784,51 +869,43 @@ export default function App() {
     </section>
   );
 
-  // 検索ボックスと絞り込み一式: ページ上（PC）と検索モーダル（狭い画面）で同じ部品を使う
-  const filterControls = (
-    <>
-      <input
-        type="search"
-        className="searchBox"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="タイトル・メモで検索"
-      />
-      <div className="filterRow">
-        <label>表示
-          <select value={viewKey} onChange={e => setViewKey(e.target.value)}>
-            <option value="all">すべて</option>
-            <option value="check">要チェック（未完結）</option>
-            <option value="unread">残りあり</option>
-            <option value="caughtup">追いつき</option>
-            <option value="finished">完了（完結・残りなし）</option>
+  // 絞り込みの選択肢一式（検索ボックスを除く）: 適用済みではなく下書きを編集する。
+  // PCのアコーディオンと検索モーダル（狭い画面）で同じ部品を使う。
+  const filterFields = (
+    <div className="filterRow">
+      <label>表示
+        <select value={draftViewKey} onChange={e => setDraftViewKey(e.target.value)}>
+          <option value="all">すべて</option>
+          <option value="check">要チェック（未完結）</option>
+          <option value="unread">残りあり</option>
+          <option value="caughtup">追いつき</option>
+          <option value="finished">完了（完結・残りなし）</option>
+        </select>
+      </label>
+      <label>カテゴリ
+        <select value={draftCategoryFilter} onChange={e => setDraftCategoryFilter(e.target.value)}>
+          <option value="all">すべて</option>
+          {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </label>
+      <label>並び順
+        <select value={draftSortKey} onChange={e => setDraftSortKey(e.target.value)}>
+          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </label>
+      {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
+        <label key={key}>{label}
+          <select
+            value={draftFlagFilters[key]}
+            onChange={e => setDraftFlagFilters(f => ({ ...f, [key]: e.target.value as FlagMode }))}
+          >
+            <option value="any">指定なし</option>
+            <option value="only">のみ表示</option>
+            <option value="exclude">非表示</option>
           </select>
         </label>
-        <label>カテゴリ
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-            <option value="all">すべて</option>
-            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label>並び順
-          <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
-        {([['favorite', 'お気に入り'], ['completed', '完結'], ['adult', 'アダルト'], ['hidden', '非表示']] as const).map(([key, label]) => (
-          <label key={key}>{label}
-            <select
-              value={flagFilters[key]}
-              onChange={e => setFlagFilters(f => ({ ...f, [key]: e.target.value as FlagMode }))}
-            >
-              <option value="any">指定なし</option>
-              <option value="only">のみ表示</option>
-              <option value="exclude">非表示</option>
-            </select>
-          </label>
-        ))}
-      </div>
-    </>
+      ))}
+    </div>
   );
 
   return (
@@ -861,7 +938,7 @@ export default function App() {
       <button className="fabAdd" onClick={() => setEditing({ mode: 'new' })} aria-label="新規登録" title="新規登録">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       </button>
-      <button className={`searchFab${filtersActive ? ' hasActive' : ''}`} onClick={() => setShowSearch(true)} aria-label="検索と絞り込みを開く" title="検索と絞り込み">
+      <button className={`searchFab${filtersActive ? ' hasActive' : ''}`} onClick={() => { snapshotDraft(); setShowSearch(true); }} aria-label="検索と絞り込みを開く" title="検索と絞り込み">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
       </button>
 
@@ -1007,11 +1084,19 @@ export default function App() {
 
       {showSearch && (
         <Modal title="検索と絞り込み" onClose={() => setShowSearch(false)}>
-          {filterControls}
+          <input
+            type="search"
+            className="searchBox"
+            value={draftQuery}
+            onChange={e => setDraftQuery(e.target.value)}
+            placeholder="タイトル・メモで検索"
+          />
+          {filterFields}
           {summaryLine}
-          <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
+          <p className="countLine">全{storedStats.total}件中 {draftVisible.length}件を表示</p>
+          {draftDirtyModal && <p className="note">未適用の変更があります。「結果を表示」を押すまで一覧は変わりません。</p>}
           <div className="modalActions">
-            <button className="btn" onClick={resetFilters} disabled={!filtersActive}>条件をリセット</button>
+            <button className="btn" onClick={resetFilters} disabled={!filtersActive && !draftDirtyModal}>条件をリセット</button>
             <button className="btn btnPrimary" onClick={showSearchResults}>結果を表示</button>
           </div>
         </Modal>
@@ -1022,8 +1107,29 @@ export default function App() {
       {summaryLine}
 
       <section className="filters" aria-label="検索と絞り込み">
-        {filterControls}
-        <button className="btn filtersReset" onClick={resetFilters} disabled={!filtersActive}>条件をリセット</button>
+        <input
+          type="search"
+          className="searchBox"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="タイトル・メモで検索"
+        />
+        <div className="filterAccordion">
+          <button type="button" className="filterAccordionHead" aria-expanded={showFilterPanel} onClick={toggleFilterPanel}>
+            <span>並び順・絞り込み（現在: {appliedSortLabel}）</span>
+            <span className="filterAccordionChevron" aria-hidden="true">{showFilterPanel ? '▲' : '▼'}</span>
+          </button>
+          {showFilterPanel && (
+            <div className="filterPanel">
+              {filterFields}
+              {draftDirtyPanel && <p className="note">未適用の変更があります。「適用」を押すまで一覧は変わりません。</p>}
+              <div className="filterPanelActions">
+                <button className="btn" onClick={resetFilters} disabled={!filtersActive && !draftDirtyPanel}>条件をリセット</button>
+                <button className="btn btnPrimary" onClick={() => applyDraft(false)} disabled={!draftDirtyPanel}>適用</button>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
       <p className="countLine">全{storedStats.total}件中 {visible.length}件を表示</p>
 
