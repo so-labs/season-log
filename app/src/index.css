@@ -202,16 +202,39 @@ body {
   font-size: 16px;
 }
 
-.settingsSeparator {
-  height: 1px;
-  background: var(--line);
-  margin: 10px 0 4px;
+/* 設定モーダルのタブ: テーマ切替と同じセグメント型で3分類を切り替える */
+.settingsTabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: var(--chip-bg);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
 }
 
-/* バージョン表示: 設定モーダルの末尾に右寄せで出す（値は sw.js から取得） */
+.settingsTabBtn {
+  padding: 7px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.settingsTabBtn.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* バージョン表示: 設定モーダルの末尾に中央寄せで出す（値は sw.js から取得） */
 .versionLine {
   margin: 16px 0 0;
-  text-align: right;
+  text-align: center;
   font-size: 12px;
   color: var(--muted);
 }

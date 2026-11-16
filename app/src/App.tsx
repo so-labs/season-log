@@ -347,6 +347,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'data' | 'cloud'>('general');
   const [showSearch, setShowSearch] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [query, setQuery] = useState('');
@@ -686,7 +687,7 @@ export default function App() {
       const text = await provider.downloadSyncFile(meta.id);
       setLoaded({ works: worksFromJson(text), sourceName: `${provider.label} の同期ファイル`, format: 'json' });
       setLoadedFromCloud(meta);
-      setCloudNote('クラウドの内容を取り込み待ちにしました。下の確認欄で保存方法を選んでください。');
+      setCloudNote('クラウドの内容を取り込み待ちにしました。確認欄で保存方法を選んでください。');
     } catch (e) {
       setLoadedFromCloud(null);
       setCloudError(e instanceof Error ? e.message : String(e));
@@ -842,7 +843,7 @@ export default function App() {
         </div>
         <div className="headerActions">
           <button className="btn btnPrimary addBtn" onClick={() => setEditing({ mode: 'new' })}>＋ 新規登録</button>
-          <button className="settingsBtn" onClick={() => setShowSettings(true)} aria-label="設定を開く" title="設定">
+          <button className="settingsBtn" onClick={() => { setSettingsTab('general'); setShowSettings(true); }} aria-label="設定を開く" title="設定">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           </button>
         </div>
@@ -866,119 +867,140 @@ export default function App() {
 
       {showSettings && (
         <Modal title="設定" wide onClose={() => setShowSettings(false)}>
-          <section className="settingsSection">
-            <h2 className="settingsSubheading">テーマ</h2>
-            <p className="note">アプリの外観切り替え</p>
-            <div className="themeToggleGroup" role="radiogroup" aria-label="テーマ">
-              <button type="button" className={`themeToggleBtn${themePref === 'light' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'light'} onClick={() => setThemePref('light')}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                <span>ライト</span>
-              </button>
-              <button type="button" className={`themeToggleBtn${themePref === 'system' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'system'} onClick={() => setThemePref('system')}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"></path></svg>
-                <span>システム</span>
-              </button>
-              <button type="button" className={`themeToggleBtn${themePref === 'dark' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'dark'} onClick={() => setThemePref('dark')}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                <span>ダーク</span>
-              </button>
-            </div>
-          </section>
-          <div className="settingsSeparator" />
-          <section className="settingsSection">
-            <h2 className="settingsSubheading">データ管理</h2>
-            <h3>ファイルを取り込む</h3>
-            <p className="note">本アプリが出力したCSV、またはJSONバックアップを取り込めます。</p>
-            <div className="panelRow">
-              <label>新規登録の既定カテゴリ
-                <select value={category} onChange={e => setCategory(e.target.value)}>
-                  {!CATEGORIES.includes(category) && <option>{category}</option>}
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </label>
-              <label>新規登録の既定の進捗単位
-                <select value={unit} onChange={e => setUnit(e.target.value)}>
-                  {!UNITS.includes(unit) && <option>{unit}</option>}
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
-                </select>
-              </label>
-              <input
-                type="file"
-                accept=".csv,.txt,.json"
-                onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
-              />
-            </div>
-            {error && <p className="error" role="alert">{error}</p>}
-            {loaded && loadedStats && (
-              <div className="importBox">
-                <p>
-                  <strong>取り込み結果: {loaded.sourceName}</strong><br />
-                  形式: {loaded.format === 'new' ? 'CSV' : 'JSONバックアップ'} / {loadedStats.total}件<br />
-                  お気に入り {loadedStats.favorite} / 完結 {loadedStats.completed} / アダルト {loadedStats.adult} / 非表示 {loadedStats.hidden} / 日付あり {loadedStats.withDate} / 進捗が小数 {loadedStats.decimal}
-                </p>
-                <div className="panelRow">
-                  {stored.length === 0 && (
-                    <button className="btn btnPrimary" onClick={() => void saveImport('replace')}>この内容で保存する</button>
-                  )}
-                  {stored.length > 0 && (
-                    <>
-                      <button className="btn btnPrimary" onClick={() => void saveImport('merge')}>IDで照合して保存（既存は更新・新規は追加）</button>
-                      <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
-                    </>
-                  )}
-                  <button className="btn" onClick={() => { setLoaded(null); if (loadedFromCloud) setCloudNote(null); setLoadedFromCloud(null); }}>保存しない</button>
+          <div className="settingsTabs" role="tablist" aria-label="設定の分類">
+            {([
+              ['general', '一般'],
+              ['data', 'データ管理'],
+              ['cloud', 'クラウド同期'],
+            ] as const).map(([key, label]) => (
+              <button key={key} type="button" role="tab" aria-selected={settingsTab === key} className={`settingsTabBtn${settingsTab === key ? ' active' : ''}`} onClick={() => setSettingsTab(key)}>{label}</button>
+            ))}
+          </div>
+          {settingsTab === 'general' && (
+            <>
+              <section className="settingsSection">
+                <h2 className="settingsSubheading">テーマ</h2>
+                <p className="note">アプリの外観切り替え</p>
+                <div className="themeToggleGroup" role="radiogroup" aria-label="テーマ">
+                  <button type="button" className={`themeToggleBtn${themePref === 'light' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'light'} onClick={() => setThemePref('light')}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                    <span>ライト</span>
+                  </button>
+                  <button type="button" className={`themeToggleBtn${themePref === 'system' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'system'} onClick={() => setThemePref('system')}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor"></path></svg>
+                    <span>システム</span>
+                  </button>
+                  <button type="button" className={`themeToggleBtn${themePref === 'dark' ? ' active' : ''}`} role="radio" aria-checked={themePref === 'dark'} onClick={() => setThemePref('dark')}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                    <span>ダーク</span>
+                  </button>
                 </div>
-                <ul className="previewList">
-                  {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
-                    <li key={w.id}><span className="previewTitle">{w.title}</span><span className="previewMeta">{formatX10(w.progressX10)} / {w.maxX10 === null ? '—' : formatX10(w.maxX10)} {w.unit}</span></li>
-                  ))}
-                </ul>
-                {loaded.works.length > PREVIEW_ROWS && <p className="note">…ほか {loaded.works.length - PREVIEW_ROWS} 件（プレビューは先頭{PREVIEW_ROWS}件のみ）</p>}
+              </section>
+              <section className="settingsSection">
+                <h2 className="settingsSubheading">新規登録の既定</h2>
+                <p className="note">新規登録のときに、最初に選ばれているカテゴリと進捗単位です。</p>
+                <div className="panelRow">
+                  <label>カテゴリ
+                    <select value={category} onChange={e => setCategory(e.target.value)}>
+                      {!CATEGORIES.includes(category) && <option>{category}</option>}
+                      {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </label>
+                  <label>進捗単位
+                    <select value={unit} onChange={e => setUnit(e.target.value)}>
+                      {!UNITS.includes(unit) && <option>{unit}</option>}
+                      {UNITS.map(u => <option key={u}>{u}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </section>
+            </>
+          )}
+          {settingsTab === 'data' && (
+            <section className="settingsSection">
+              <h3>ファイルを取り込む</h3>
+              <p className="note">本アプリが出力したCSV、またはJSONバックアップを取り込めます。</p>
+              <div className="panelRow">
+                <input
+                  type="file"
+                  accept=".csv,.txt,.json"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
+                />
               </div>
-            )}
-            <h3>保存済みデータの書き出し・削除</h3>
-            <div className="panelRow">
-              <button className="btn" onClick={() => download('season-log.csv', worksToCsv(stored), 'text/csv')} disabled={stored.length === 0}>CSVをダウンロード</button>
-              <button className="btn" onClick={() => download('season-log.json', worksToJson(stored), 'application/json')} disabled={stored.length === 0}>JSONをダウンロード</button>
-              <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
-            </div>
-            <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
-          </section>
-          <div className="settingsSeparator" />
-          <section className="settingsSection">
-            <h2 className="settingsSubheading">クラウド同期</h2>
-            {!activeCloudProvider && (
-              <>
-                <p className="note">JSONバックアップをクラウドに保存して、他の端末と受け渡しできます。同期はボタンを押したときだけ行います（自動同期はしません）。利用できるクラウドは1つだけです。</p>
-                <div className="panelRow">
-                  {CLOUD_PROVIDERS.map(p => (
-                    <button key={p.id} className="btn" disabled={cloudBusy !== null || !p.isConfigured()} onClick={() => void handleCloudConnect(p)}>{p.label}に接続</button>
-                  ))}
-                </div>
-                {CLOUD_PROVIDERS.some(p => !p.isConfigured()) && (
-                  <p className="note">未設定のクラウドは利用できません（デプロイ環境の環境変数で、接続に必要なIDを設定してください）。</p>
+              <h3>保存済みデータの書き出し・削除</h3>
+              <div className="panelRow">
+                <button className="btn" onClick={() => download('season-log.csv', worksToCsv(stored), 'text/csv')} disabled={stored.length === 0}>CSVをダウンロード</button>
+                <button className="btn" onClick={() => download('season-log.json', worksToJson(stored), 'application/json')} disabled={stored.length === 0}>JSONをダウンロード</button>
+                <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
+              </div>
+              <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
+            </section>
+          )}
+          {settingsTab === 'cloud' && (
+            <section className="settingsSection">
+              {!activeCloudProvider && (
+                <>
+                  <p className="note">JSONバックアップをクラウドに保存して、他の端末と受け渡しできます。同期はボタンを押したときだけ行います（自動同期はしません）。利用できるクラウドは1つだけです。</p>
+                  <div className="panelRow">
+                    {CLOUD_PROVIDERS.map(p => (
+                      <button key={p.id} className="btn" disabled={cloudBusy !== null || !p.isConfigured()} onClick={() => void handleCloudConnect(p)}>{p.label}に接続</button>
+                    ))}
+                  </div>
+                  {CLOUD_PROVIDERS.some(p => !p.isConfigured()) && (
+                    <p className="note">未設定のクラウドは利用できません（デプロイ環境の環境変数で、接続に必要なIDを設定してください）。</p>
+                  )}
+                </>
+              )}
+              {activeCloudProvider && (
+                <>
+                  <p className="note">
+                    接続先: {activeCloudProvider.label}（{cloudConnected ? '接続済み' : '未接続 — 操作時に自動で接続します'}）
+                    {cloudLastSynced && <><br />最終同期: {formatCloudDateTime(cloudLastSynced)}</>}
+                    {cloudRemoteMeta && <><br />クラウドの同期ファイル: {formatCloudDateTime(cloudRemoteMeta.updatedAt)} 更新</>}
+                  </p>
+                  <div className="panelRow">
+                    <button className="btn btnPrimary" disabled={cloudBusy !== null || stored.length === 0} onClick={() => void handleCloudSave(false)}>クラウドに保存</button>
+                    <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudLoad()}>クラウドから読み込む</button>
+                    <button className="btn" disabled={cloudBusy !== null} onClick={handleCloudDisconnect}>接続を解除</button>
+                  </div>
+                  <p className="note">読み込むと、ファイルの取り込みと同じ確認欄が出て、保存方法（IDで照合／すべて入れ替え）を選べます。接続を解除しても、クラウド上のファイルは消えません。</p>
+                </>
+              )}
+              {cloudBusy && <p className="note" role="status">{cloudBusy}</p>}
+              {cloudError && <p className="error" role="alert">{cloudError}</p>}
+              {cloudNote && <p className="ok">{cloudNote}</p>}
+            </section>
+          )}
+          {/* 取り込み待ちの確認欄は、どのタブでも見えるよう共通の位置に出す
+              （クラウドから読み込んだ場合も、同じ確認欄を使うため）。 */}
+          {error && <p className="error" role="alert">{error}</p>}
+          {loaded && loadedStats && (
+            <div className="importBox">
+              <p>
+                <strong>取り込み結果: {loaded.sourceName}</strong><br />
+                形式: {loaded.format === 'new' ? 'CSV' : 'JSONバックアップ'} / {loadedStats.total}件<br />
+                お気に入り {loadedStats.favorite} / 完結 {loadedStats.completed} / アダルト {loadedStats.adult} / 非表示 {loadedStats.hidden} / 日付あり {loadedStats.withDate} / 進捗が小数 {loadedStats.decimal}
+              </p>
+              <div className="panelRow">
+                {stored.length === 0 && (
+                  <button className="btn btnPrimary" onClick={() => void saveImport('replace')}>この内容で保存する</button>
                 )}
-              </>
-            )}
-            {activeCloudProvider && (
-              <>
-                <p className="note">
-                  接続先: {activeCloudProvider.label}（{cloudConnected ? '接続済み' : '未接続 — 操作時に自動で接続します'}）
-                  {cloudLastSynced && <><br />最終同期: {formatCloudDateTime(cloudLastSynced)}</>}
-                  {cloudRemoteMeta && <><br />クラウドの同期ファイル: {formatCloudDateTime(cloudRemoteMeta.updatedAt)} 更新</>}
-                </p>
-                <div className="panelRow">
-                  <button className="btn btnPrimary" disabled={cloudBusy !== null || stored.length === 0} onClick={() => void handleCloudSave(false)}>クラウドに保存</button>
-                  <button className="btn" disabled={cloudBusy !== null} onClick={() => void handleCloudLoad()}>クラウドから読み込む</button>
-                  <button className="btn" disabled={cloudBusy !== null} onClick={handleCloudDisconnect}>接続を解除</button>
-                </div>
-                <p className="note">読み込むと、ファイルの取り込みと同じ確認欄が出て、保存方法（IDで照合／すべて入れ替え）を選べます。接続を解除しても、クラウド上のファイルは消えません。</p>
-              </>
-            )}
-            {cloudBusy && <p className="note" role="status">{cloudBusy}</p>}
-            {cloudError && <p className="error" role="alert">{cloudError}</p>}
-            {cloudNote && <p className="ok">{cloudNote}</p>}
-          </section>
+                {stored.length > 0 && (
+                  <>
+                    <button className="btn btnPrimary" onClick={() => void saveImport('merge')}>IDで照合して保存（既存は更新・新規は追加）</button>
+                    <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
+                  </>
+                )}
+                <button className="btn" onClick={() => { setLoaded(null); if (loadedFromCloud) setCloudNote(null); setLoadedFromCloud(null); }}>保存しない</button>
+              </div>
+              <ul className="previewList">
+                {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
+                  <li key={w.id}><span className="previewTitle">{w.title}</span><span className="previewMeta">{formatX10(w.progressX10)} / {w.maxX10 === null ? '—' : formatX10(w.maxX10)} {w.unit}</span></li>
+                ))}
+              </ul>
+              {loaded.works.length > PREVIEW_ROWS && <p className="note">…ほか {loaded.works.length - PREVIEW_ROWS} 件（プレビューは先頭{PREVIEW_ROWS}件のみ）</p>}
+            </div>
+          )}
           {appVersion && <p className="versionLine">Ver {appVersion}</p>}
         </Modal>
       )}
