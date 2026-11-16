@@ -336,7 +336,7 @@ const SORT_OPTIONS = [
 ] as const;
 
 /** 「表示」の選択肢の値。端末に記憶した条件の検証にも使う。 */
-const VIEW_KEYS = ['all', 'check', 'unread', 'caughtup', 'finished'];
+const VIEW_KEYS = ['all', 'check', 'unread', 'caughtup', 'finished', 'notfinished'];
 
 const FLAG_MODES = ['any', 'only', 'exclude'];
 
@@ -528,6 +528,7 @@ export default function App() {
       unread: hasUnread,
       caughtup: isCaughtUp,
       finished: isFinishedReading,
+      notfinished: w => !isFinishedReading(w),
     };
     const flagValue: Record<string, (w: Work) => boolean> = {
       favorite: w => w.favorite,
@@ -932,6 +933,7 @@ export default function App() {
           <option value="unread">残りあり</option>
           <option value="caughtup">追いつき</option>
           <option value="finished">完了（完結・残りなし）</option>
+          <option value="notfinished">完結・追いつきを除く</option>
         </select>
       </label>
       <label>カテゴリ
