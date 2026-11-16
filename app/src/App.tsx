@@ -451,8 +451,7 @@ export default function App() {
     return seen;
   }, [stored]);
 
-  // 条件（適用済み／下書き）を受け取って、絞り込み＋並び替えした一覧を返す。
-  // 適用済みの一覧と、下書きの件数プレビューの両方で使う。
+  // 条件を受け取って、絞り込み＋並び替えした一覧を返す（適用済みの一覧用）。
   type FilterValues = {
     query: string;
     viewKey: string;
@@ -521,15 +520,6 @@ export default function App() {
     sortKey,
     flags: flagFilters,
   }), [stored, flagFilters, viewKey, categoryFilter, query, sortKey]);
-
-  // 下書き条件での件数プレビュー（モーダルとアコーディオンで使う）。
-  const draftVisible = useMemo(() => listFor({
-    query: draftQuery,
-    viewKey: draftViewKey,
-    categoryFilter: draftCategoryFilter,
-    sortKey: draftSortKey,
-    flags: draftFlagFilters,
-  }), [stored, draftFlagFilters, draftViewKey, draftCategoryFilter, draftQuery, draftSortKey]);
 
   // 表示順の固定: 並び順が値に依存する場合（残り順・最終進捗日順など）、進捗や
   // 日付の変更でその場で並び替えると、操作中のカードが移動して誤操作の原因になる。
@@ -636,7 +626,7 @@ export default function App() {
     });
   }
 
-  // 検索モーダルの「結果を表示」: 下書きを適用して閉じ、一覧の先頭へ戻る
+  // 検索モーダルの「適用」: 下書きを適用して閉じ、一覧の先頭へ戻る
   function showSearchResults() {
     applyDraft(true);
     setShowSearch(false);
@@ -1093,11 +1083,9 @@ export default function App() {
           />
           {filterFields}
           {summaryLine}
-          <p className="countLine">全{storedStats.total}件中 {draftVisible.length}件を表示</p>
-          {draftDirtyModal && <p className="note">未適用の変更があります。「結果を表示」を押すまで一覧は変わりません。</p>}
           <div className="modalActions">
             <button className="btn" onClick={resetFilters} disabled={!filtersActive && !draftDirtyModal}>条件をリセット</button>
-            <button className="btn btnPrimary" onClick={showSearchResults}>結果を表示</button>
+            <button className="btn btnPrimary" onClick={showSearchResults}>適用</button>
           </div>
         </Modal>
       )}
@@ -1122,7 +1110,6 @@ export default function App() {
           {showFilterPanel && (
             <div className="filterPanel">
               {filterFields}
-              {draftDirtyPanel && <p className="note">未適用の変更があります。「適用」を押すまで一覧は変わりません。</p>}
               <div className="filterPanelActions">
                 <button className="btn" onClick={resetFilters} disabled={!filtersActive && !draftDirtyPanel}>条件をリセット</button>
                 <button className="btn btnPrimary" onClick={() => applyDraft(false)} disabled={!draftDirtyPanel}>適用</button>
