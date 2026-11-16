@@ -335,6 +335,53 @@ const SORT_OPTIONS = [
   { value: 'checkDesc', label: '最終チェック日が新しい順' },
 ] as const;
 
+/** 「表示」の選択肢の値。端末に記憶した条件の検証にも使う。 */
+const VIEW_KEYS = ['all', 'check', 'unread', 'caughtup', 'finished'];
+
+const FLAG_MODES = ['any', 'only', 'exclude'];
+
+interface SavedFilters {
+  viewKey: string;
+  categoryFilter: string;
+  flagFilters: Record<'favorite' | 'completed' | 'adult' | 'hidden', 'any' | 'only' | 'exclude'>;
+}
+
+/** 端末に記憶した絞り込み条件（表示・カテゴリ・フラグ）を読む。壊れた値や想定外の値は既定に落とす。 */
+function loadSavedFilters(): SavedFilters {
+  const defaults: SavedFilters = {
+    viewKey: 'all',
+    categoryFilter: 'all',
+    flagFilters: {
+      favorite: 'any',
+      completed: 'any',
+      adult: 'any',
+      hidden: 'exclude',
+    },
+  };
+  try {
+    const raw = localStorage.getItem('season-log:filters');
+    if (raw === null) return defaults;
+    const parsed = JSON.parse(raw) as Partial<SavedFilters>;
+    const flags = (parsed.flagFilters ?? {}) as Record<string, unknown>;
+    const flagOr = (key: keyof SavedFilters['flagFilters']) =>
+      typeof flags[key] === 'string' && FLAG_MODES.includes(flags[key] as string)
+        ? (flags[key] as SavedFilters['flagFilters'][typeof key])
+        : defaults.flagFilters[key];
+    return {
+      viewKey: typeof parsed.viewKey === 'string' && VIEW_KEYS.includes(parsed.viewKey) ? parsed.viewKey : defaults.viewKey,
+      categoryFilter: typeof parsed.categoryFilter === 'string' ? parsed.categoryFilter : defaults.categoryFilter,
+      flagFilters: {
+        favorite: flagOr('favorite'),
+        completed: flagOr('completed'),
+        adult: flagOr('adult'),
+        hidden: flagOr('hidden'),
+      },
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 export default function App() {
   // 設定は localStorage に置く（端末ローカル。作品データには混ぜない）。
   const [category, setCategory] = useState(() => localStorage.getItem('season-log:defaultCategory') ?? '漫画');
@@ -352,17 +399,26 @@ export default function App() {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [query, setQuery] = useState('');
   type FlagMode = 'any' | 'only' | 'exclude';
-  const [flagFilters, setFlagFilters] = useState<Record<'favorite' | 'completed' | 'adult' | 'hidden', FlagMode>>({
-    favorite: 'any', completed: 'any', adult: 'any', hidden: 'exclude',
-  });
-  const [viewKey, setViewKey] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  // 絞り込み条件（表示・カテゴリ・フラグ）は、並び順と同じく端末にだけ記憶する
+  // （作品データや書き出しには含めない）。検索語は記憶しない（開き直したときに
+  // 前回の検索語で絞られたままになると、かえって分かりにくいため）。
+  const [savedFilters] = useState(loadSavedFilters);
+  const [flagFilters, setFlagFilters] = useState<Record<'favorite' | 'completed' | 'adult' | 'hidden', FlagMode>>(savedFilters.flagFilters);
+  const [viewKey, setViewKey] = useState(savedFilters.viewKey);
+  const [categoryFilter, setCategoryFilter] = useState(savedFilters.categoryFilter);
   // 並び順は端末にだけ記憶する（作品データや書き出しには含めない）。
   const [sortKey, setSortKey] = useState(() => {
     const v = localStorage.getItem('season-log:sort');
     return v !== null && SORT_OPTIONS.some(o => o.value === v) ? v : 'orderDesc';
   });
   useEffect(() => { localStorage.setItem('season-log:sort', sortKey); }, [sortKey]);
+  useEffect(() => {
+    localStorage.setItem('season-log:filters', JSON.stringify({
+      viewKey,
+      categoryFilter,
+      flagFilters,
+    }));
+  }, [viewKey, categoryFilter, flagFilters]);
   // 並び順・絞り込みの下書き: パネルやモーダルで編集しても、「適用」を押すまでは
   // 一覧（適用済みの条件）に反映しない。開くたびに適用済みの条件から作り直す。
   // PCの一覧上の検索ボックスだけは適用済みを直接編集する（即時反映）。
@@ -413,6 +469,12 @@ export default function App() {
   // クラウドから読み込んだ取り込み待ちデータの出所（保存時に同期記録を更新するため）。
   const [loadedFromCloud, setLoadedFromCloud] = useState<CloudRemoteMeta | null>(null);
   const activeCloudProvider = CLOUD_PROVIDERS.find(p => p.id === cloudProviderId) ?? null;
+
+  // 端末の空き容量が逼迫したときに、ブラウザがこのサイトの保存領域
+  // （作品データや条件の記憶）を自動で消してしまわないよう、永続化を要求する。
+  useEffect(() => {
+    if (navigator.storage?.persist) void navigator.storage.persist();
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -875,6 +937,9 @@ export default function App() {
       <label>カテゴリ
         <select value={draftCategoryFilter} onChange={e => setDraftCategoryFilter(e.target.value)}>
           <option value="all">すべて</option>
+          {draftCategoryFilter !== 'all' && !categoryOptions.includes(draftCategoryFilter) && (
+            <option value={draftCategoryFilter}>{draftCategoryFilter}</option>
+          )}
           {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </label>
