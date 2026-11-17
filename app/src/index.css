@@ -409,9 +409,9 @@ body {
 
 /* 引き継ぎコードの発行結果（コードは大きく、QRは読み取りのため白地で表示する） */
 .handoverCode {
-  font-size: 30px;
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.12em;
   font-variant-numeric: tabular-nums;
   margin: 8px 0;
 }

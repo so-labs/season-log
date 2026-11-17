@@ -1,5 +1,5 @@
 // 引き継ぎコードの中継サーバー（Cloudflare Pages Functions）。
-// 送り側が預けたJSONバックアップを KV に最大15分だけ置き、受け取り側が
+// 送り側が預けたJSONバックアップを KV に最大10分だけ置き、受け取り側が
 // コードで1回だけ取得できるようにする、通り道だけの実装。
 // データを恒常的に保持することはしない（受け取り成功で即削除、
 // 受け取られなくても有効期限で自動削除）。
@@ -26,12 +26,15 @@ interface PagesContext {
   params: { action?: string };
 }
 
-/** コードの有効期限（秒）: 15分 */
-const TTL_SECONDS = 15 * 60;
+/** コードの有効期限（秒）: 10分 */
+const TTL_SECONDS = 10 * 60;
 /** 預けられるデータの上限（バイト）。実データは約350KB */
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
-/** コードは8桁の数字（先行ゼロあり） */
-const CODE_PATTERN = /^\d{8}$/;
+/** コードに使う文字（紛らわしい 0・1・I・L・O を除いた31文字） */
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+/** コードは英数字10文字 */
+const CODE_LENGTH = 10;
+const CODE_PATTERN = /^[2-9A-HJKMNP-Z]{10}$/;
 /** 同じ接続元からの受け取り失敗がこの回数を超えたら、窓の間は止める */
 const MAX_FAILURES = 30;
 
@@ -49,11 +52,19 @@ function errorResponse(status: number, message: string): Response {
   return jsonResponse(status, { error: message });
 }
 
-/** 8桁コードを生成する（暗号論的乱数を使い、剰余の偏りは実用上無視できる範囲） */
+/** コードを生成する（暗号論的乱数を使い、剰余の偏りが出ないよう棄却サンプリングする） */
 function generateCode(): string {
-  const buf = new Uint32Array(1);
-  crypto.getRandomValues(buf);
-  return String(buf[0] % 100_000_000).padStart(8, '0');
+  const chars: string[] = [];
+  while (chars.length < CODE_LENGTH) {
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    for (const b of buf) {
+      if (b >= 248) continue; // 31文字 × 8 = 248。これ以上は捨てて偏りをなくす
+      chars.push(CODE_ALPHABET[b % CODE_ALPHABET.length]);
+      if (chars.length === CODE_LENGTH) break;
+    }
+  }
+  return chars.join('');
 }
 
 async function handleIssue(kv: HandoverKv, request: Request): Promise<Response> {
@@ -95,7 +106,7 @@ async function readCodeFromBody(request: Request): Promise<string | null> {
 
 async function handleRedeem(kv: HandoverKv, request: Request): Promise<Response> {
   const code = await readCodeFromBody(request);
-  if (code === null) return errorResponse(400, '8桁の数字のコードを指定してください。');
+  if (code === null) return errorResponse(400, '10文字のコードを指定してください。');
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const attempts = attemptsKey(ip);
   const failures = Number.parseInt((await kv.get(attempts)) ?? '0', 10) || 0;
@@ -104,7 +115,7 @@ async function handleRedeem(kv: HandoverKv, request: Request): Promise<Response>
   }
   const value = await kv.get(codeKey(code));
   if (value === null) {
-    // 失敗回数を数える（総当たり対策）。窓は失敗のたびに15分へ伸びる。
+    // 失敗回数を数える（総当たり対策）。窓は失敗のたびに10分へ伸びる。
     await kv.put(attempts, String(failures + 1), { expirationTtl: TTL_SECONDS });
     return errorResponse(404, 'コードが見つかりませんでした。期限切れか、既に使用済みの可能性があります。');
   }
@@ -120,7 +131,7 @@ async function handleRedeem(kv: HandoverKv, request: Request): Promise<Response>
 
 async function handleCancel(kv: HandoverKv, request: Request): Promise<Response> {
   const code = await readCodeFromBody(request);
-  if (code === null) return errorResponse(400, '8桁の数字のコードを指定してください。');
+  if (code === null) return errorResponse(400, '10文字のコードを指定してください。');
   // あったかどうかは明かさず、常に成功として返す（冪等）。
   await kv.delete(codeKey(code));
   return jsonResponse(200, { ok: true });

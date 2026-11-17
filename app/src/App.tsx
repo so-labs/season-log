@@ -490,9 +490,9 @@ export default function App() {
   // コード自体は「受け取る」を押すまで使われない。URLの # は履歴に
   // 残らないよう、読み取ったら取り除く。
   useEffect(() => {
-    const m = window.location.hash.match(/handover=(\d{8})/);
+    const m = window.location.hash.match(/handover=([0-9A-Za-z]{10})/);
     if (!m) return;
-    setRedeemCode(m[1]);
+    setRedeemCode(m[1].toUpperCase());
     setSettingsTab('data');
     setShowSettings(true);
     setHandoverNote('引き継ぎコードが入力されています。「受け取る」を押してください。');
@@ -773,6 +773,8 @@ export default function App() {
       setLoadedFromCloud(null);
       setCloudNote('クラウドから読み込みました。');
     }
+    // 引き継ぎコード経由の取り込みでも、保存が終われば案内文は消す。
+    setHandoverNote(null);
     setLoaded(null);
   }
 
@@ -907,9 +909,9 @@ export default function App() {
   }
 
   async function handleHandoverRedeem() {
-    const code = redeemCode.trim();
-    if (!/^\d{8}$/.test(code)) {
-      setHandoverError('8桁の数字のコードを入力してください。');
+    const code = redeemCode.trim().toUpperCase();
+    if (!/^[2-9A-HJKMNP-Z]{10}$/.test(code)) {
+      setHandoverError('10文字のコードを入力してください。');
       return;
     }
     setHandoverError(null);
@@ -1156,7 +1158,7 @@ export default function App() {
                 />
               </div>
               <h3>他の端末への引き継ぎ（実験的）</h3>
-              <p className="note">サーバーを経由して、他の端末へデータを1回だけ渡せます。コードは15分で失効し、受け取りが完了した時点でも消えます。データは最大15分間だけサーバーに置かれます。コードを知っている人は誰でも受け取れるため、コードは他の人に見せないでください。この機能は実験的なもので、予告なく終了することがあります。</p>
+              <p className="note">サーバーを経由して、他の端末へデータを1回だけ渡せます。コードは10分で失効し、受け取りが完了した時点でも消えます。データは最大10分間だけサーバーに置かれます。コードを知っている人は誰でも受け取れるため、コードは他の人に見せないでください。この機能は実験的なもので、予告なく終了することがあります。</p>
               {!issuedHandover && (
                 <div className="panelRow">
                   <button className="btn" disabled={handoverBusy !== null || stored.length === 0} onClick={() => void handleHandoverIssue()}>引き継ぎコードを発行</button>
@@ -1164,7 +1166,7 @@ export default function App() {
               )}
               {issuedHandover && (
                 <div className="handoverIssued">
-                  <p className="handoverCode">{issuedHandover.code}</p>
+                  <p className="handoverCode">{issuedHandover.code.replace(/^(.{5})/, '$1 ')}</p>
                   <div className="handoverQr" dangerouslySetInnerHTML={{ __html: issuedHandover.qrSvg }} />
                   <p className="note">
                     有効期限: {new Date(issuedHandover.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}（残り {Math.floor(handoverRemainingSec / 60)}分{String(handoverRemainingSec % 60).padStart(2, '0')}秒）<br />
@@ -1178,14 +1180,14 @@ export default function App() {
               <div className="panelRow">
                 <input
                   type="text"
-                  inputMode="numeric"
                   autoComplete="one-time-code"
-                  maxLength={8}
-                  placeholder="8桁のコード"
+                  autoCapitalize="characters"
+                  maxLength={10}
+                  placeholder="10文字のコード"
                   value={redeemCode}
-                  onChange={e => setRedeemCode(e.target.value.replace(/[^\d]/g, ''))}
+                  onChange={e => setRedeemCode(e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase())}
                 />
-                <button className="btn btnPrimary" disabled={handoverBusy !== null || redeemCode.length !== 8} onClick={() => void handleHandoverRedeem()}>受け取る</button>
+                <button className="btn btnPrimary" disabled={handoverBusy !== null || redeemCode.length !== 10} onClick={() => void handleHandoverRedeem()}>受け取る</button>
               </div>
               {handoverBusy && <p className="note" role="status">{handoverBusy}</p>}
               {handoverError && <p className="error" role="alert">{handoverError}</p>}
@@ -1254,7 +1256,7 @@ export default function App() {
                     <button className="btn" onClick={() => void saveImport('replace')}>すべて入れ替えて保存</button>
                   </>
                 )}
-                <button className="btn" onClick={() => { setLoaded(null); if (loadedFromCloud) setCloudNote(null); setLoadedFromCloud(null); }}>保存しない</button>
+                <button className="btn" onClick={() => { setLoaded(null); if (loadedFromCloud) setCloudNote(null); setLoadedFromCloud(null); setHandoverNote(null); }}>保存しない</button>
               </div>
               <ul className="previewList">
                 {loaded.works.slice(0, PREVIEW_ROWS).map(w => (
