@@ -296,6 +296,17 @@ function CheckDialog({ work, onConfirm, onCancel }: {
   onCancel: () => void;
 }) {
   const [maxX10, setMaxX10] = useState<number | null>(work.maxX10);
+  // 最新話の更新を外部で調べる用に、タイトルをそのままコピーできるようにする。
+  const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
+  async function copyTitle() {
+    try {
+      await navigator.clipboard.writeText(work.title);
+      setCopyState('done');
+    } catch {
+      setCopyState('error');
+    }
+    window.setTimeout(() => setCopyState('idle'), 2000);
+  }
   const step = (deltaX10: number) => {
     if (maxX10 === null) {
       // 未確認からの増分は0起点にする（減らす操作は受け付けない）。
@@ -307,7 +318,10 @@ function CheckDialog({ work, onConfirm, onCancel }: {
   return (
     <Modal title="確認" onClose={onCancel}>
       <p className="checkTarget">「{work.title}」の最終チェック日を今日で記録します。</p>
-      <p className="checkMaxLine">最大: {maxX10 === null ? '未確認' : `${formatX10(maxX10)} ${work.unit}`}</p>
+      <div className="checkMaxRow">
+        <p className="checkMaxLine">最大: {maxX10 === null ? '未確認' : `${formatX10(maxX10)} ${work.unit}`}</p>
+        <button type="button" className="ghostBtn" onClick={() => void copyTitle()}>{copyState === 'done' ? 'コピーしました' : copyState === 'error' ? 'コピーできませんでした' : 'タイトルをコピー'}</button>
+      </div>
       <div className="stepper">
         <button onClick={() => step(-10)} disabled={maxX10 === null} aria-label="最大を1減らす">−1</button>
         <button onClick={() => step(-1)} disabled={maxX10 === null} aria-label="最大を0.1減らす">−0.1</button>
@@ -399,6 +413,8 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<'general' | 'data' | 'cloud'>('general');
   const [showSearch, setShowSearch] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  // 作品の削除は誤タップ対策として、実行前に汎用モーダルで確認する。
+  const [confirmingDelete, setConfirmingDelete] = useState<Work | null>(null);
   const [query, setQuery] = useState('');
   type FlagMode = 'any' | 'only' | 'exclude';
   // 絞り込み条件（表示・カテゴリ・フラグ）は、並び順と同じく端末にだけ記憶する
@@ -1361,7 +1377,7 @@ export default function App() {
               onStep={(work, d) => void onStep(work, d)}
               onCheck={work => setChecking(work)}
               onEdit={work => setEditing({ mode: 'edit', original: work })}
-              onDelete={work => void onDelete(work)}
+              onDelete={work => setConfirmingDelete(work)}
             />
           ))}
         </div>
@@ -1406,6 +1422,16 @@ export default function App() {
           confirmLabel="すべて削除する"
           onConfirm={() => void confirmClearAll()}
           onCancel={() => setConfirmingClear(false)}
+        />
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="作品の削除"
+          message={`「${confirmingDelete.title}」を削除します。削除直後の「元に戻す」でのみ取り消せます。`}
+          confirmLabel="削除する"
+          onConfirm={() => { const w = confirmingDelete; setConfirmingDelete(null); void onDelete(w); }}
+          onCancel={() => setConfirmingDelete(null)}
         />
       )}
 

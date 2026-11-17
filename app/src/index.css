@@ -601,6 +601,12 @@ body {
   font-weight: 600;
   overflow-wrap: anywhere;
   flex: 1;
+  /* 表示だけの制限: 異常に長いタイトルでカードが伸び切らないよう、
+     5行を超えたら省略する（データ自体には制限を付けない） */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
 }
 
 .star {
@@ -842,6 +848,24 @@ body {
   font-size: 14.5px;
 }
 
+/* 確認ダイアログの最大表示: 行の右端にタイトルコピーボタンを置く */
+.checkMaxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.checkMaxRow .checkMaxLine {
+  flex: 1;
+  margin: 0;
+}
+
+.checkMaxRow .ghostBtn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .checkMaxLine {
   margin: 0 0 4px;
   font-size: 15px;
@@ -949,6 +973,16 @@ body {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     z-index: 40;
     cursor: pointer;
+  }
+
+  /* 追加・検索ボタンの判定だけを少し広げる（見た目は変えない）。
+     縁の押し損ないが、裏を流れるカードの削除ボタンに届かないようにするため */
+  .fabAdd::before,
+  .searchFab::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
   }
 
   .filters {
