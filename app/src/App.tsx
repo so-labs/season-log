@@ -900,6 +900,18 @@ export default function App() {
     }
   }
 
+  async function handleHandoverCopy() {
+    if (!issuedHandover) return;
+    setHandoverError(null);
+    try {
+      // コピーするのは区切りを含まない10文字そのもの。
+      await navigator.clipboard.writeText(issuedHandover.code);
+      setHandoverNote('コードをコピーしました。');
+    } catch {
+      setHandoverError('コピーできませんでした。コードを直接選択してコピーしてください。');
+    }
+  }
+
   async function handleHandoverCancel() {
     if (!issuedHandover) return;
     const code = issuedHandover.code;
@@ -1166,13 +1178,14 @@ export default function App() {
               )}
               {issuedHandover && (
                 <div className="handoverIssued">
-                  <p className="handoverCode">{issuedHandover.code.replace(/^(.{5})/, '$1 ')}</p>
+                  <p className="handoverCode"><span>{issuedHandover.code.slice(0, 5)}</span><span>{issuedHandover.code.slice(5)}</span></p>
                   <div className="handoverQr" dangerouslySetInnerHTML={{ __html: issuedHandover.qrSvg }} />
                   <p className="note">
                     有効期限: {new Date(issuedHandover.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}（残り {Math.floor(handoverRemainingSec / 60)}分{String(handoverRemainingSec % 60).padStart(2, '0')}秒）<br />
                     受け取る端末でこのコードを入力するか、QRコードをカメラで読み取って開いてください。受け取りが終わったら、この画面は閉じてかまいません。
                   </p>
                   <div className="panelRow">
+                    <button className="btn" disabled={handoverBusy !== null} onClick={() => void handleHandoverCopy()}>コードをコピー</button>
                     <button className="btn" disabled={handoverBusy !== null} onClick={() => void handleHandoverCancel()}>このコードを取り消す</button>
                   </div>
                 </div>
@@ -1182,10 +1195,9 @@ export default function App() {
                   type="text"
                   autoComplete="one-time-code"
                   autoCapitalize="characters"
-                  maxLength={10}
                   placeholder="10文字のコード"
                   value={redeemCode}
-                  onChange={e => setRedeemCode(e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase())}
+                  onChange={e => setRedeemCode(e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 10))}
                 />
                 <button className="btn btnPrimary" disabled={handoverBusy !== null || redeemCode.length !== 10} onClick={() => void handleHandoverRedeem()}>受け取る</button>
               </div>

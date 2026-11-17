@@ -416,6 +416,11 @@ body {
   margin: 8px 0;
 }
 
+/* コードの区切りは文字ではなく間隔で付ける（コピーしても区切りが混ざらないように） */
+.handoverCode span+span {
+  margin-left: 0.45em;
+}
+
 .handoverQr {
   background: #fff;
   padding: 8px;
