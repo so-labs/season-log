@@ -1,7 +1,7 @@
 // Season Log のサービスワーカー: アプリ本体をキャッシュし、オフラインでも起動できるようにする。
 // キャッシュ名は AGENTS.md の規則（season-log-YYYY.MM-rN）に従う。
 // アプリ内のバージョン表示は、この CACHE_NAME から動的に取り出す（ここが唯一の正本）。
-const CACHE_NAME = 'season-log-2026.11-r14';
+const CACHE_NAME = 'season-log-2026.11-r15';
 
 // インストール時: 起動の入り口だけを先にキャッシュする
 self.addEventListener('install', event => {
@@ -30,6 +30,9 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
   // sw.js 自身は横取りしない（バージョン表示と更新検知を常に最新にするため）
   if (url.pathname === '/sw.js') return;
+  // API（引き継ぎコードの中継など）は横取りしない。1回限りの応答を
+  // キャッシュに残さないため、常にネットワークへ通す。
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(

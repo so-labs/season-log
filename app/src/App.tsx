@@ -18,6 +18,8 @@ import {
   type CloudProvider, type CloudRemoteMeta,
 } from './cloud';
 import { googleDriveProvider } from './cloud-google-drive';
+import { cancelHandover, issueHandover, redeemHandover, type IssuedHandover } from './handover';
+import qrcode from 'qrcode-generator';
 
 // 利用できるクラウド同期先の一覧。同期を有効にできるのは常に1つだけ。
 // 別のクラウドを足すときは、ここに実装を追加する。
@@ -469,12 +471,47 @@ export default function App() {
   // クラウドから読み込んだ取り込み待ちデータの出所（保存時に同期記録を更新するため）。
   const [loadedFromCloud, setLoadedFromCloud] = useState<CloudRemoteMeta | null>(null);
   const activeCloudProvider = CLOUD_PROVIDERS.find(p => p.id === cloudProviderId) ?? null;
+  // 引き継ぎコード（実験的）: 発行したコードとQR、受け取り入力欄の状態。
+  const [handoverBusy, setHandoverBusy] = useState<string | null>(null);
+  const [handoverError, setHandoverError] = useState<string | null>(null);
+  const [handoverNote, setHandoverNote] = useState<string | null>(null);
+  const [issuedHandover, setIssuedHandover] = useState<(IssuedHandover & { qrSvg: string }) | null>(null);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [handoverNow, setHandoverNow] = useState(() => Date.now());
 
   // 端末の空き容量が逼迫したときに、ブラウザがこのサイトの保存領域
   // （作品データや条件の記憶）を自動で消してしまわないよう、永続化を要求する。
   useEffect(() => {
     if (navigator.storage?.persist) void navigator.storage.persist();
   }, []);
+
+  // QRコード（コード入りのURL）をスマホのカメラで読み取って開いた場合:
+  // コードを受け取り欄に入れた状態で設定のデータ管理を開く。
+  // コード自体は「受け取る」を押すまで使われない。URLの # は履歴に
+  // 残らないよう、読み取ったら取り除く。
+  useEffect(() => {
+    const m = window.location.hash.match(/handover=(\d{8})/);
+    if (!m) return;
+    setRedeemCode(m[1]);
+    setSettingsTab('data');
+    setShowSettings(true);
+    setHandoverNote('引き継ぎコードが入力されています。「受け取る」を押してください。');
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, []);
+
+  // 発行したコードの残り時間を数える（期限が来たら表示を消す）。
+  useEffect(() => {
+    if (!issuedHandover) return;
+    const t = setInterval(() => setHandoverNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [issuedHandover]);
+
+  useEffect(() => {
+    if (!issuedHandover) return;
+    if (handoverNow < new Date(issuedHandover.expiresAt).getTime()) return;
+    setIssuedHandover(null);
+    setHandoverNote('引き継ぎコードの有効期限が切れました。必要な場合は発行し直してください。');
+  }, [issuedHandover, handoverNow]);
 
   useEffect(() => {
     if (!toast) return;
@@ -507,6 +544,10 @@ export default function App() {
 
   const storedStats = useMemo(() => statsOf(stored), [stored]);
   const loadedStats = useMemo(() => (loaded ? statsOf(loaded.works) : null), [loaded]);
+  // 発行中の引き継ぎコードの残り秒数（表示用）。
+  const handoverRemainingSec = issuedHandover
+    ? Math.max(0, Math.floor((new Date(issuedHandover.expiresAt).getTime() - handoverNow) / 1000))
+    : 0;
   const categoryOptions = useMemo(() => {
     const seen: string[] = [];
     for (const w of stored) if (!seen.includes(w.category)) seen.push(w.category);
@@ -834,6 +875,59 @@ export default function App() {
     }
   }
 
+  // ----- 引き継ぎコード（実験的） -----
+
+  async function handleHandoverIssue() {
+    setHandoverError(null);
+    setHandoverNote(null);
+    setHandoverBusy('引き継ぎコードを発行しています…');
+    try {
+      const issued = await issueHandover(worksToJson(stored));
+      // QRはアプリ内では読み取らず、スマホのカメラでURLを開く前提。
+      const url = `${window.location.origin}${window.location.pathname}#handover=${issued.code}`;
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      const qrSvg = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+      setIssuedHandover({ ...issued, qrSvg });
+      setHandoverNow(Date.now());
+    } catch (e) {
+      setHandoverError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHandoverBusy(null);
+    }
+  }
+
+  async function handleHandoverCancel() {
+    if (!issuedHandover) return;
+    const code = issuedHandover.code;
+    setIssuedHandover(null);
+    await cancelHandover(code);
+    setHandoverNote('引き継ぎコードを取り消しました。');
+  }
+
+  async function handleHandoverRedeem() {
+    const code = redeemCode.trim();
+    if (!/^\d{8}$/.test(code)) {
+      setHandoverError('8桁の数字のコードを入力してください。');
+      return;
+    }
+    setHandoverError(null);
+    setHandoverNote(null);
+    setHandoverBusy('引き継ぎコードで受け取っています…');
+    try {
+      const text = await redeemHandover(code);
+      setLoaded({ works: worksFromJson(text), sourceName: '引き継ぎコード', format: 'json' });
+      setLoadedFromCloud(null);
+      setRedeemCode('');
+      setHandoverNote('引き継ぎコードの内容を取り込み待ちにしました。確認欄で保存方法を選んでください。');
+    } catch (e) {
+      setHandoverError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHandoverBusy(null);
+    }
+  }
+
   async function confirmClearAll() {
     setConfirmingClear(false);
     setShowSettings(false);
@@ -1061,6 +1155,41 @@ export default function App() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
                 />
               </div>
+              <h3>他の端末への引き継ぎ（実験的）</h3>
+              <p className="note">サーバーを経由して、他の端末へデータを1回だけ渡せます。コードは15分で失効し、受け取りが完了した時点でも消えます。データは最大15分間だけサーバーに置かれます。コードを知っている人は誰でも受け取れるため、コードは他の人に見せないでください。この機能は実験的なもので、予告なく終了することがあります。</p>
+              {!issuedHandover && (
+                <div className="panelRow">
+                  <button className="btn" disabled={handoverBusy !== null || stored.length === 0} onClick={() => void handleHandoverIssue()}>引き継ぎコードを発行</button>
+                </div>
+              )}
+              {issuedHandover && (
+                <div className="handoverIssued">
+                  <p className="handoverCode">{issuedHandover.code}</p>
+                  <div className="handoverQr" dangerouslySetInnerHTML={{ __html: issuedHandover.qrSvg }} />
+                  <p className="note">
+                    有効期限: {new Date(issuedHandover.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}（残り {Math.floor(handoverRemainingSec / 60)}分{String(handoverRemainingSec % 60).padStart(2, '0')}秒）<br />
+                    受け取る端末でこのコードを入力するか、QRコードをカメラで読み取って開いてください。受け取りが終わったら、この画面は閉じてかまいません。
+                  </p>
+                  <div className="panelRow">
+                    <button className="btn" disabled={handoverBusy !== null} onClick={() => void handleHandoverCancel()}>このコードを取り消す</button>
+                  </div>
+                </div>
+              )}
+              <div className="panelRow">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  placeholder="8桁のコード"
+                  value={redeemCode}
+                  onChange={e => setRedeemCode(e.target.value.replace(/[^\d]/g, ''))}
+                />
+                <button className="btn btnPrimary" disabled={handoverBusy !== null || redeemCode.length !== 8} onClick={() => void handleHandoverRedeem()}>受け取る</button>
+              </div>
+              {handoverBusy && <p className="note" role="status">{handoverBusy}</p>}
+              {handoverError && <p className="error" role="alert">{handoverError}</p>}
+              {handoverNote && <p className="ok">{handoverNote}</p>}
               <h3>保存済みデータの書き出し・削除</h3>
               <div className="panelRow">
                 <button className="btn" onClick={() => download('season-log.csv', worksToCsv(stored), 'text/csv')} disabled={stored.length === 0}>CSVをダウンロード</button>

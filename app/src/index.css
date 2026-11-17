@@ -397,6 +397,7 @@ body {
 }
 
 .panelRow select,
+.panelRow input[type='text'],
 .filters select {
   padding: 6px 8px;
   border: 1px solid var(--line);
@@ -404,6 +405,28 @@ body {
   font-size: 14px;
   background: var(--surface);
   color: var(--ink);
+}
+
+/* 引き継ぎコードの発行結果（コードは大きく、QRは読み取りのため白地で表示する） */
+.handoverCode {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+}
+
+.handoverQr {
+  background: #fff;
+  padding: 8px;
+  display: inline-block;
+  line-height: 0;
+  border-radius: 8px;
+}
+
+.handoverQr svg {
+  width: 180px;
+  height: 180px;
 }
 
 .importBox {
