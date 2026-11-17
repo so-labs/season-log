@@ -5,7 +5,9 @@
 // クライアントIDは公開情報だが、設定の変更や各自でのデプロイに備えて
 // コードには書かず、環境変数 VITE_GOOGLE_CLIENT_ID から読み込む
 // （ローカルでは app/.env.local、本番ではホスティング側の環境変数）。
-// アクセストークンはメモリ上にだけ持ち、保存はしない。
+// アクセストークンは、有効期限（最大1時間）の間だけブラウザ内に保存し、
+// アプリを開き直しても再認証（ポップアップ）を省けるようにする。
+// 期限切れ・接続解除のときは破棄する。
 import {
   CLOUD_SYNC_FILE_NAME,
   type CloudProvider,
@@ -17,6 +19,7 @@ const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 // 次回接続時にアカウント選択を省くための控え（login_hint）としてだけ使う。
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email';
 const LOGIN_HINT_KEY = 'season-log:cloud-google-drive-login-hint';
+const TOKEN_KEY = 'season-log:cloud-google-drive-token';
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const DRIVE_API_BASE = 'https://www.googleapis.com';
 
@@ -44,9 +47,52 @@ declare global {
   }
 }
 
-// ---------- トークン管理（メモリ上のみ） ----------
+// ---------- トークン管理 ----------
 let accessToken: string | null = null;
 let accessTokenExpiresAt = 0;
+
+// 保存したトークンの読み書き: 開き直しても有効期限内なら再認証を省くため、
+// トークンと有効期限を localStorage に持つ（壊れた値は無いものとして扱う）。
+function loadStoredToken(): { token: string; expiresAt: number } | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as { token?: unknown; expiresAt?: unknown };
+    if (typeof parsed.token !== 'string' || typeof parsed.expiresAt !== 'number') return null;
+    return {
+      token: parsed.token,
+      expiresAt: parsed.expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredToken() {
+  if (accessToken === null) return;
+  localStorage.setItem(TOKEN_KEY, JSON.stringify({
+    token: accessToken,
+    expiresAt: accessTokenExpiresAt,
+  }));
+}
+
+function clearStoredToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+/** メモリ上または保存済みのトークンがまだ使えれば true（保存済みの場合はメモリにも載せる）。 */
+function hasUsableToken(): boolean {
+  if (accessToken !== null && Date.now() < accessTokenExpiresAt - 60_000) return true;
+  const stored = loadStoredToken();
+  if (stored === null) return false;
+  if (Date.now() >= stored.expiresAt - 60_000) {
+    clearStoredToken();
+    return false;
+  }
+  accessToken = stored.token;
+  accessTokenExpiresAt = stored.expiresAt;
+  return true;
+}
 let tokenClient: GisTokenClient | null = null;
 let gisLoadPromise: Promise<void> | null = null;
 // トークンクライアントのコールバックは生成時に固定されるため、
@@ -78,7 +124,7 @@ async function requestAccessToken(): Promise<string> {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error('Google DriveのクライアントIDが設定されていません。環境変数 VITE_GOOGLE_CLIENT_ID を設定してください。');
   }
-  if (accessToken !== null && Date.now() < accessTokenExpiresAt - 60_000) return accessToken;
+  if (hasUsableToken()) return accessToken!;
   await loadGis();
   const oauth2 = window.google?.accounts?.oauth2;
   if (!oauth2) throw new Error('Googleの認証ライブラリを利用できませんでした。');
@@ -96,6 +142,7 @@ async function requestAccessToken(): Promise<string> {
         }
         accessToken = response.access_token;
         accessTokenExpiresAt = Date.now() + (response.expires_in ?? 3600) * 1000;
+        saveStoredToken();
         pending.resolve(accessToken);
         // アカウントの控えが無ければ、ベストエフォートで取得しておく（失敗しても同期は続行）。
         if (!localStorage.getItem(LOGIN_HINT_KEY)) void rememberLoginHint(accessToken);
@@ -148,6 +195,7 @@ async function driveRequest(path: string, init: RequestInit = {}): Promise<Respo
     // トークンが失効していたら破棄して、次回は再認証から始める。
     accessToken = null;
     accessTokenExpiresAt = 0;
+    clearStoredToken();
     throw new Error('認証の有効期限が切れました。もう一度お試しください。');
   }
   return res;
@@ -223,18 +271,21 @@ export const googleDriveProvider: CloudProvider = {
     await requestAccessToken();
   },
   disconnect() {
-    const token = accessToken;
+    const token = accessToken ?? loadStoredToken()?.token ?? null;
     accessToken = null;
     accessTokenExpiresAt = 0;
+    clearStoredToken();
     localStorage.removeItem(LOGIN_HINT_KEY);
     if (token && window.google?.accounts?.oauth2) {
       try {
         window.google.accounts.oauth2.revoke(token, () => { /* 破棄結果は問わない */ });
-      } catch { /* ライブラリ未読込時はメモリ上の破棄だけでよい */ }
+      } catch { /* ライブラリ未読込時は認証の取り消しを省いてよい */ }
     }
   },
   isConnected() {
-    return accessToken !== null && Date.now() < accessTokenExpiresAt;
+    if (accessToken !== null && Date.now() < accessTokenExpiresAt) return true;
+    const stored = loadStoredToken();
+    return stored !== null && Date.now() < stored.expiresAt;
   },
   findSyncFile,
   uploadSyncFile,

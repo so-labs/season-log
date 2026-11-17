@@ -26,7 +26,7 @@ export interface CloudProvider {
   readonly label: string;
   /** 利用に必要な設定（環境変数など）が揃っているかどうか */
   isConfigured(): boolean;
-  /** 接続する（必要なら認証画面が出る）。トークンはメモリ上にだけ持つ */
+  /** 接続する（必要なら認証画面が出る）。トークンは有効期限の間だけブラウザ内に保存する */
   connect(): Promise<void>;
   /** この端末での接続を解除する。クラウド上のファイルは消さない */
   disconnect(): void;
