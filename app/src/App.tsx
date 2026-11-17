@@ -478,6 +478,18 @@ export default function App() {
   const [issuedHandover, setIssuedHandover] = useState<(IssuedHandover & { qrSvg: string }) | null>(null);
   const [redeemCode, setRedeemCode] = useState('');
   const [handoverNow, setHandoverNow] = useState(() => Date.now());
+  const handoverNoteTimer = useRef<number | null>(null);
+
+  // 完了報告の案内文（取り消し・コピーなど）は、一定時間で自動的に消す。
+  // 「取り込み待ち」のような次の操作を促す案内文は対象にしない。
+  // タイマーが発火した時点で別の案内文に差し替わっていたら、そちらは消さない。
+  function showTransientHandoverNote(text: string) {
+    setHandoverNote(text);
+    if (handoverNoteTimer.current !== null) window.clearTimeout(handoverNoteTimer.current);
+    handoverNoteTimer.current = window.setTimeout(() => {
+      setHandoverNote(current => (current === text ? null : current));
+    }, 8000);
+  }
 
   // 端末の空き容量が逼迫したときに、ブラウザがこのサイトの保存領域
   // （作品データや条件の記憶）を自動で消してしまわないよう、永続化を要求する。
@@ -510,7 +522,7 @@ export default function App() {
     if (!issuedHandover) return;
     if (handoverNow < new Date(issuedHandover.expiresAt).getTime()) return;
     setIssuedHandover(null);
-    setHandoverNote('引き継ぎコードの有効期限が切れました。必要な場合は発行し直してください。');
+    showTransientHandoverNote('引き継ぎコードの有効期限が切れました。必要な場合は発行し直してください。');
   }, [issuedHandover, handoverNow]);
 
   useEffect(() => {
@@ -906,7 +918,7 @@ export default function App() {
     try {
       // コピーするのは区切りを含まない10文字そのもの。
       await navigator.clipboard.writeText(issuedHandover.code);
-      setHandoverNote('コードをコピーしました。');
+      showTransientHandoverNote('コードをコピーしました。');
     } catch {
       setHandoverError('コピーできませんでした。コードを直接選択してコピーしてください。');
     }
@@ -917,7 +929,7 @@ export default function App() {
     const code = issuedHandover.code;
     setIssuedHandover(null);
     await cancelHandover(code);
-    setHandoverNote('引き継ぎコードを取り消しました。');
+    showTransientHandoverNote('引き継ぎコードを取り消しました。');
   }
 
   async function handleHandoverRedeem() {
