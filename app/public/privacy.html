@@ -5,6 +5,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>プライバシーポリシー | Season Log</title>
+  <script>
+    // アプリ側のテーマ設定（localStorage の season-log:theme）とOSの配色から、
+    // 描画前にテーマを決める。CSSより先に実行し、白い画面のフラッシュを防ぐ。
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem('season-log:theme'); } catch (e) { /* 保存領域が使えない環境ではOS設定に従う */ }
+      var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (dark) document.documentElement.dataset.theme = 'dark';
+    })();
+  </script>
   <style>
     body {
       margin: 0;
@@ -43,6 +53,25 @@
       color: #57534E;
       font-size: 13px;
     }
+
+    /* ダークテーマ: アプリ本体のダーク配色に合わせる */
+    html[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    html[data-theme="dark"] body {
+      background: #0F1F1E;
+      color: #F5F5F4;
+    }
+
+    html[data-theme="dark"] h1,
+    html[data-theme="dark"] a {
+      color: #2DD4BF;
+    }
+
+    html[data-theme="dark"] .date {
+      color: #A8A29E;
+    }
   </style>
 </head>
 
@@ -58,7 +87,10 @@
 
     <h2>ブラウザ内への保存</h2>
     <p>登録した作品データは、お使いのブラウザ内（IndexedDB）に保存されます。テーマなどの設定はブラウザの localStorage
-      に保存されます。これらのデータが運営者や第三者に送信されることはありません。ブラウザのデータを消去すると、これらのデータも消えます。</p>
+      に保存されます。これらのデータが運営者や第三者に送信されることはありません。ブラウザのデータを消去すると、これらのデータも消えます。ブラウザのキャッシュ削除や履歴削除の操作でも消えることがあるため、大切なデータはCSV /
+      JSON形式で定期的にバックアップを取ることをおすすめします。</p>
+    <p>特にiPhoneのSafariでは、サイトを開かない状態が続くと、ブラウザの仕組み（ITP: Intelligent Tracking
+      Prevention）により、保存データが自動で削除されることがあります。ホーム画面に追加したWebアプリはこの削除の対象外のため、iPhoneではホーム画面に追加して使うことをおすすめします。</p>
 
     <h2>Google Drive 連携（任意機能）</h2>
     <p>クラウド同期は任意の機能で、利用者が設定画面で接続した場合にのみ動作します。</p>

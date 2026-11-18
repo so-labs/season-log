@@ -1068,8 +1068,8 @@ export default function App() {
           <option value="check">要チェック（未完結）</option>
           <option value="unread">残りあり</option>
           <option value="caughtup">追いつき</option>
-          <option value="finished">完了（完結・残りなし）</option>
-          <option value="notfinished">完結・追いつきを除く</option>
+          <option value="finished">完了した作品（完結・残りなし）</option>
+          <option value="notfinished">完了した作品を除く</option>
         </select>
       </label>
       <label>カテゴリ
@@ -1238,14 +1238,14 @@ export default function App() {
                 <button className="btn" onClick={() => download('season-log.json', worksToJson(stored), 'application/json')} disabled={stored.length === 0}>JSONをダウンロード</button>
                 <button className="btn danger" onClick={() => setConfirmingClear(true)} disabled={stored.length === 0}>全データ削除</button>
               </div>
-              <p className="note">データはこのブラウザに保存されています（IndexedDB）。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
+              <p className="note">データはこのブラウザに保存されています（IndexedDB）。ブラウザのデータ削除で消えてしまうことがあるため、定期的なバックアップをおすすめします。バックアップや他の端末への移行には、JSONまたはCSVのダウンロードをご利用ください。</p>
             </section>
           )}
           {settingsTab === 'cloud' && (
             <section className="settingsSection">
               {!activeCloudProvider && (
                 <>
-                  <p className="note">JSONバックアップをクラウドに保存して、他の端末と受け渡しできます。同期はボタンを押したときだけ行います（自動同期はしません）。利用できるクラウドは1つだけです。</p>
+                  <p className="note">JSONバックアップをクラウドに保存して、他の端末と受け渡しできます。同期はボタンを押したときだけ行います（自動同期はしません）。</p>
                   <div className="panelRow">
                     {CLOUD_PROVIDERS.map(p => (
                       <button key={p.id} className="btn" disabled={cloudBusy !== null || !p.isConfigured()} onClick={() => void handleCloudConnect(p)}>{p.label}に接続</button>
@@ -1307,6 +1307,7 @@ export default function App() {
             </div>
           )}
           {appVersion && <p className="versionLine">Ver {appVersion}</p>}
+          <p className="privacyLine"><a href="/privacy.html">プライバシーポリシー</a></p>
         </Modal>
       )}
 

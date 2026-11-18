@@ -239,6 +239,17 @@ body {
   color: var(--muted);
 }
 
+/* 設定モーダルの最下部に出す、プライバシーポリシーへの導線 */
+.privacyLine {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+}
+
+.privacyLine a {
+  color: var(--accent);
+}
+
 /* テーマのセグメント切替 — 他ツールと同仕様 */
 .themeToggleGroup {
   display: grid;
