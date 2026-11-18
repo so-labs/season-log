@@ -617,9 +617,13 @@ export default function App() {
       (q === '' || w.title.toLowerCase().includes(q) || w.memo.toLowerCase().includes(q)),
     );
     const sorted = [...list];
-    // 並び替え: どのキーでも両方向を選べる。同点の場合は保存順を保つ（安定ソート）。
+    // 並び替え: どのキーでも両方向を選べる。同点の場合は、主キーの向きに合わせた
+    // 保存順にする（新しい順なら保存も新しい順、古い順なら保存も古い順）。
     // 日付なしは「最も古い」扱いにする（新しい順では末尾、古い順では先頭）。
     // 残りは、最大が未確認で計算できない作品を、多い順・少ない順のどちらでも末尾に置く。
+    const savedIndex = new Map(sorted.map((w, i) => [w.id, i]));
+    const withTieBreak = (cmp: (a: Work, b: Work) => number, dir: 1 | -1) =>
+      (a: Work, b: Work) => cmp(a, b) || dir * ((savedIndex.get(a.id) ?? 0) - (savedIndex.get(b.id) ?? 0));
     const byDate = (get: (w: Work) => string | null, dir: 1 | -1) =>
       (a: Work, b: Work) => dir * (get(a) ?? '').localeCompare(get(b) ?? '');
     const byUnread = (dir: 1 | -1) => (a: Work, b: Work) => {
@@ -632,14 +636,14 @@ export default function App() {
     };
     switch (values.sortKey) {
       case 'orderDesc': sorted.reverse(); break;
-      case 'titleAsc': sorted.sort((a, b) => a.title.localeCompare(b.title, 'ja')); break;
-      case 'titleDesc': sorted.sort((a, b) => b.title.localeCompare(a.title, 'ja')); break;
-      case 'unreadDesc': sorted.sort(byUnread(-1)); break;
-      case 'unreadAsc': sorted.sort(byUnread(1)); break;
-      case 'progressDesc': sorted.sort(byDate(w => w.lastProgressDate, -1)); break;
-      case 'progressAsc': sorted.sort(byDate(w => w.lastProgressDate, 1)); break;
-      case 'checkAsc': sorted.sort(byDate(w => w.lastCheckedDate, 1)); break;
-      case 'checkDesc': sorted.sort(byDate(w => w.lastCheckedDate, -1)); break;
+      case 'titleAsc': sorted.sort(withTieBreak((a, b) => a.title.localeCompare(b.title, 'ja'), 1)); break;
+      case 'titleDesc': sorted.sort(withTieBreak((a, b) => b.title.localeCompare(a.title, 'ja'), -1)); break;
+      case 'unreadDesc': sorted.sort(withTieBreak(byUnread(-1), -1)); break;
+      case 'unreadAsc': sorted.sort(withTieBreak(byUnread(1), 1)); break;
+      case 'progressDesc': sorted.sort(withTieBreak(byDate(w => w.lastProgressDate, -1), -1)); break;
+      case 'progressAsc': sorted.sort(withTieBreak(byDate(w => w.lastProgressDate, 1), 1)); break;
+      case 'checkAsc': sorted.sort(withTieBreak(byDate(w => w.lastCheckedDate, 1), 1)); break;
+      case 'checkDesc': sorted.sort(withTieBreak(byDate(w => w.lastCheckedDate, -1), -1)); break;
       default: break; // orderAsc は保存順のまま
     }
     return sorted;
