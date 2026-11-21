@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  applyEdits, decodeTextBuffer, findSimilarTitles, formatX10, hasUnread, isCaughtUp,
+  applyEdits, buildOffsets, decodeTextBuffer, findSimilarTitles, findVisibleRange, formatX10, hasUnread, isCaughtUp,
   applyCheck, isFinishedReading,
   parseNewCsv, parseX10, stepProgress, stepValueX10, todayLocal, unreadX10,
   worksFromJson, worksToCsv, worksToJson,
@@ -398,6 +398,13 @@ function loadSavedFilters(): SavedFilters {
   }
 }
 
+/** 仮想スクロール: カード同士の間隔（CSSの元 gap と同じ値） */
+const CARD_GAP_PX = 12;
+/** 仮想スクロール: まだ実測できていないカードの推定の高さ（カード本体のみ） */
+const ESTIMATED_CARD_HEIGHT_PX = 200;
+/** 仮想スクロール: 画面の上下に先読みする範囲 */
+const OVERSCAN_PX = 600;
+
 export default function App() {
   // 設定は localStorage に置く（端末ローカル。作品データには混ぜない）。
   const [category, setCategory] = useState(() => localStorage.getItem('season-log:defaultCategory') ?? '漫画');
@@ -688,6 +695,96 @@ export default function App() {
       .map(id => stored.find(w => w.id === id))
       .filter((w): w is Work => w !== undefined)
     : sortedVisible;
+
+  // ---------- 仮想スクロール ----------
+  // 全件を描画すると低性能端末で重くなるため、画面の近くにあるカードだけを描画する。
+  // カードの高さは ResizeObserver で実測して作品IDで覚える（並び替えや絞り込みを
+  // またいでも使い回せる。実測は観測の開始時とサイズ変更時に自動で更新される）。
+  // まだ測れていないカードは推定値で計算し、実測が届いたら位置を計算し直す。
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
+  const pendingHeights = useRef(new Map<string, number>());
+  const heightFlushRaf = useRef(0);
+  const [heightCache, setHeightCache] = useState(() => new Map<string, number>());
+  const [scrollY, setScrollY] = useState(0);
+  const [viewportH, setViewportH] = useState(0);
+  const [listTop, setListTop] = useState(0);
+
+  useEffect(() => {
+    const flush = () => {
+      heightFlushRaf.current = 0;
+      const pending = pendingHeights.current;
+      if (pending.size === 0) return;
+      const entries = [...pending];
+      pending.clear();
+      setHeightCache(prev => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [id, h] of entries) {
+          if (Math.abs((next.get(id) ?? -1) - h) >= 1) { next.set(id, h); changed = true; }
+        }
+        return changed ? next : prev;
+      });
+    };
+    const ro = new ResizeObserver(roEntries => {
+      for (const entry of roEntries) {
+        const el = entry.target as HTMLElement;
+        const id = el.dataset.workId;
+        if (id) pendingHeights.current.set(id, el.offsetHeight);
+      }
+      if (pendingHeights.current.size > 0 && !heightFlushRaf.current) {
+        heightFlushRaf.current = requestAnimationFrame(flush);
+      }
+    });
+    roRef.current = ro;
+    return () => {
+      ro.disconnect();
+      roRef.current = null;
+      if (heightFlushRaf.current) cancelAnimationFrame(heightFlushRaf.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; setScrollY(window.scrollY); });
+    };
+    const onResize = () => setViewportH(window.innerHeight);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    setScrollY(window.scrollY);
+    setViewportH(window.innerHeight);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // 一覧の先端位置は、上にある絞り込みパネルの開閉などで動くため、描画のたびに測り直す。
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    setListTop(prev => (Math.abs(prev - top) > 0.5 ? top : prev));
+  });
+
+  const slotRef = useCallback((el: HTMLDivElement | null) => {
+    const ro = roRef.current;
+    if (!ro || !el) return;
+    ro.observe(el);
+    return () => ro.unobserve(el);
+  }, []);
+
+  const cardOffsets = buildOffsets(visible.map(w => (heightCache.get(w.id) ?? ESTIMATED_CARD_HEIGHT_PX) + CARD_GAP_PX));
+  const listTotalHeight = visible.length > 0 ? cardOffsets[visible.length]! - CARD_GAP_PX : 0;
+  const visibleRange = findVisibleRange(
+    cardOffsets,
+    scrollY - listTop - OVERSCAN_PX,
+    scrollY - listTop + viewportH + OVERSCAN_PX,
+  );
+  const visibleSlice = visible.slice(visibleRange.start, visibleRange.end);
 
   // 絞り込みが既定以外になっているか（検索ボタンのドット表示と、リセットの可否に使う）
   const filtersActive =
@@ -1374,16 +1471,23 @@ export default function App() {
           <p className="note">検索や絞り込みの条件を変えてみてください。</p>
         </section>
       ) : (
-        <div className="cardList">
-          {visible.map(w => (
-            <WorkCard
+        <div className="cardList" ref={listRef} style={{ height: listTotalHeight }}>
+          {visibleSlice.map((w, k) => (
+            <div
               key={w.id}
-              work={w}
-              onStep={(work, d) => void onStep(work, d)}
-              onCheck={work => setChecking(work)}
-              onEdit={work => setEditing({ mode: 'edit', original: work })}
-              onDelete={work => setConfirmingDelete(work)}
-            />
+              className="cardSlot"
+              data-work-id={w.id}
+              ref={slotRef}
+              style={{ transform: `translateY(${cardOffsets[visibleRange.start + k]}px)` }}
+            >
+              <WorkCard
+                work={w}
+                onStep={(work, d) => void onStep(work, d)}
+                onCheck={work => setChecking(work)}
+                onEdit={work => setEditing({ mode: 'edit', original: work })}
+                onDelete={work => setConfirmingDelete(work)}
+              />
+            </div>
           ))}
         </div>
       )}

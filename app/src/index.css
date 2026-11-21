@@ -582,11 +582,18 @@ body {
   margin: 8px 2px;
 }
 
-/* 作品カード — 表は使わず、横スクロールなし */
+/* 作品カード — 表は使わず、横スクロールなし。
+   一覧は仮想スクロール: コンテナに全体の高さを持たせ、カードは
+   スロットに絶対配置する（間隔は高さ計算に含める） */
 .cardList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  position: relative;
+}
+
+.cardSlot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 .workCard {
